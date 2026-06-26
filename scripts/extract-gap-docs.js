@@ -5,7 +5,8 @@ const path = require("path");
 
 const DEFAULT_DOC_DIR = "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1\\doc\\ref";
 const OUTPUT_FILE = path.join(__dirname, "..", "data", "gap-docs.json");
-const MAX_PARAGRAPHS = 3;
+const MAX_BLOCKS = 5;
+const MAX_PARAGRAPHS = 4;
 const MAX_DESCRIPTION_LENGTH = 1600;
 
 const KEYWORDS = [
@@ -115,12 +116,17 @@ function extractSections(html, file, chapterTitle) {
     const heading = cleanText(rawHeading);
     const sectionNumber = sectionNumberFromHeading(heading);
     const title = heading.replace(sectionNumber, "").trim();
-    const description = extractDescription(body);
+    const hoverBlocks = extractHoverBlocks(body);
+    const description = hoverBlocks
+      .filter((block) => block.type === "paragraph")
+      .map((block) => markdownToPlainText(block.markdown))
+      .join("\n\n");
     const entries = extractFunctionBlocks(body).map((func) => ({
       name: func.name,
       kind: func.kind,
       signature: func.signature,
       description,
+      blocks: hoverBlocks,
       section: sectionNumber,
       title,
       chapterTitle,
@@ -176,30 +182,51 @@ function extractFunctionBlocks(body) {
   return blocks;
 }
 
-function extractDescription(body) {
+function extractHoverBlocks(body) {
   const withoutSignatures = body.replace(/<div class="func">[\s\S]*?<\/div>/g, " ");
-  const paragraphs = [];
-  const paragraphPattern = /<p>([\s\S]*?)<\/p>/g;
+  const blocks = [];
+  const blockPattern = /<p>([\s\S]*?)<\/p>|<div class="example"><pre>([\s\S]*?)<\/pre><\/div>/g;
+  let paragraphCount = 0;
   let match;
 
-  while ((match = paragraphPattern.exec(withoutSignatures)) !== null) {
-    const text = cleanText(match[1]);
-    if (!text) {
-      continue;
+  while ((match = blockPattern.exec(withoutSignatures)) !== null) {
+    if (match[1] !== undefined) {
+      if (paragraphCount >= MAX_PARAGRAPHS) {
+        continue;
+      }
+
+      const markdown = cleanParagraphMarkdown(match[1]);
+      if (!markdown) {
+        continue;
+      }
+
+      blocks.push({
+        type: "paragraph",
+        markdown
+      });
+      paragraphCount += 1;
+    } else if (match[2] !== undefined) {
+      const code = cleanPreText(match[2]);
+      if (!code) {
+        continue;
+      }
+
+      blocks.push({
+        type: "example",
+        code
+      });
     }
 
-    paragraphs.push(text);
-    if (paragraphs.length >= MAX_PARAGRAPHS || paragraphs.join("\n\n").length >= MAX_DESCRIPTION_LENGTH) {
+    if (blocks.length >= MAX_BLOCKS || blocksTextLength(blocks) >= MAX_DESCRIPTION_LENGTH) {
       break;
     }
   }
 
-  const description = paragraphs.join("\n\n");
-  if (description.length <= MAX_DESCRIPTION_LENGTH) {
-    return description;
-  }
+  return blocks;
+}
 
-  return `${description.slice(0, MAX_DESCRIPTION_LENGTH - 1).trimEnd()}...`;
+function blocksTextLength(blocks) {
+  return blocks.reduce((sum, block) => sum + (block.markdown || block.code || "").length, 0);
 }
 
 function cleanSignature(text) {
@@ -219,6 +246,47 @@ function cleanText(html) {
       .replace(/<[^>]+>/g, "")
   )
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanParagraphMarkdown(html) {
+  return htmlToMarkdown(html)
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+}
+
+function cleanPreText(html) {
+  return decodeHtml(
+    html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+  )
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function htmlToMarkdown(html) {
+  return decodeHtml(
+    html
+      .replace(/<code class="(?:func|code|keyw)">([\s\S]*?)<\/code>/g, (_, content) => `\`${cleanText(content)}\``)
+      .replace(/<var class="Arg">([\s\S]*?)<\/var>/g, (_, content) => `_${cleanText(content)}_`)
+      .replace(/<strong class="pkg">([\s\S]*?)<\/strong>/g, (_, content) => `**${cleanText(content)}**`)
+      .replace(/<em>([\s\S]*?)<\/em>/g, (_, content) => `_${cleanText(content)}_`)
+      .replace(/<span class="SimpleMath">([\s\S]*?)<\/span>/g, (_, content) => `_${cleanText(content)}_`)
+      .replace(/<span class="RefLink">([\s\S]*?)<\/span>/g, (_, content) => cleanText(content))
+      .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/g, "$1")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<[^>]+>/g, "")
+  );
+}
+
+function markdownToPlainText(markdown) {
+  return markdown
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
     .trim();
 }
 

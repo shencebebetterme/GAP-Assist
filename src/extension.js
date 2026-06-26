@@ -51,6 +51,8 @@ class GapHoverProvider {
     const maxEntries = config.get("hover.maxEntries", 4);
     const maxDescriptionLength = config.get("hover.maxDescriptionLength", 900);
     const wrapColumn = config.get("hover.wrapColumn", 86);
+    const maxExamples = config.get("hover.maxExamples", 1);
+    const maxExampleLines = config.get("hover.maxExampleLines", 14);
     const entryGroups = groupEntries(entries);
     const shownEntryGroups = entryGroups.slice(0, maxEntries);
 
@@ -60,23 +62,34 @@ class GapHoverProvider {
     };
 
     shownEntryGroups.forEach((group, index) => {
+      const title = [group.entry.section, group.entry.title || group.entry.name].filter(Boolean).join(" ");
+      if (title) {
+        markdown.appendMarkdown(`### ${escapeMarkdown(title)}\n\n`);
+      }
+
       const signatures = group.signatures.length > 0 ? group.signatures : [group.entry.name];
       markdown.appendCodeblock(signatures.map((signature) => wrapSignature(signature, wrapColumn)).join("\n"), "gap");
 
       const meta = [group.entry.kind, group.entry.section ? `section ${group.entry.section}` : undefined]
         .filter(Boolean)
-        .join(" | ");
+        .join(" - ");
       if (meta) {
-        markdown.appendMarkdown("_");
-        markdown.appendText(meta);
-        markdown.appendMarkdown("_\n\n");
+        markdown.appendMarkdown(`_${escapeMarkdown(meta)}_\n\n`);
       }
 
-      if (group.entry.description) {
+      if (Array.isArray(group.entry.blocks) && group.entry.blocks.length > 0) {
+        appendBlocks(markdown, group.entry.blocks, {
+          fallbackText: group.entry.description,
+          maxDescriptionLength,
+          maxExamples,
+          maxExampleLines,
+          wrapColumn
+        });
+      } else if (group.entry.description) {
         appendWrappedText(markdown, truncate(group.entry.description, maxDescriptionLength), wrapColumn);
       }
 
-      markdown.appendMarkdown(`[Open local GAP reference](${manualCommandUri(group.entry)})`);
+      markdown.appendMarkdown(`[$(book) Open full local GAP reference](${manualCommandUri(group.entry)})`);
 
       if (index < shownEntryGroups.length - 1) {
         markdown.appendMarkdown("\n\n---\n\n");
@@ -196,7 +209,8 @@ function groupEntries(entries) {
       entry.file,
       entry.kind,
       entry.section,
-      entry.description
+      entry.description,
+      JSON.stringify(entry.blocks || [])
     ].join("\u0000");
     const signature = entry.signature || entry.name;
 
@@ -216,6 +230,35 @@ function groupEntries(entries) {
   return Array.from(groupsByKey.values());
 }
 
+function appendBlocks(markdown, blocks, options) {
+  let exampleCount = 0;
+  let proseLength = 0;
+  let renderedAny = false;
+
+  for (const block of blocks) {
+    if (block.type === "paragraph" && block.markdown) {
+      if (proseLength >= options.maxDescriptionLength) {
+        continue;
+      }
+
+      const remaining = options.maxDescriptionLength - proseLength;
+      const text = truncate(block.markdown, remaining);
+      appendWrappedMarkdown(markdown, text, options.wrapColumn);
+      proseLength += text.length;
+      renderedAny = true;
+    } else if (block.type === "example" && block.code && exampleCount < options.maxExamples) {
+      markdown.appendMarkdown("**Example**\n\n");
+      markdown.appendCodeblock(limitExampleLines(block.code, options.maxExampleLines), "gap");
+      exampleCount += 1;
+      renderedAny = true;
+    }
+  }
+
+  if (!renderedAny && options.fallbackText) {
+    appendWrappedText(markdown, truncate(options.fallbackText, options.maxDescriptionLength), options.wrapColumn);
+  }
+}
+
 function appendWrappedText(markdown, text, column) {
   const paragraphs = text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
 
@@ -223,6 +266,24 @@ function appendWrappedText(markdown, text, column) {
     const wrappedLines = wrapText(paragraph, column).map(escapeMarkdown);
     markdown.appendMarkdown(`${wrappedLines.join("  \n")}\n\n`);
   }
+}
+
+function appendWrappedMarkdown(markdown, text, column) {
+  const paragraphs = text.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+
+  for (const paragraph of paragraphs) {
+    const wrappedLines = wrapText(paragraph, column);
+    markdown.appendMarkdown(`${wrappedLines.join("  \n")}\n\n`);
+  }
+}
+
+function limitExampleLines(code, maxLines) {
+  const lines = code.split(/\r?\n/);
+  if (lines.length <= maxLines) {
+    return code;
+  }
+
+  return [...lines.slice(0, maxLines), `... ${lines.length - maxLines} more lines`].join("\n");
 }
 
 function wrapSignature(signature, column) {

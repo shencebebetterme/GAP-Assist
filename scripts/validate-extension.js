@@ -80,7 +80,7 @@ function validateDocs(docs, failures) {
     return;
   }
 
-  for (const required of ["NameFunction", "DeclareOperation", "Size", "IsGroup"]) {
+  for (const required of ["NameFunction", "DeclareOperation", "Size", "IsGroup", "GeneratorsOfGroup"]) {
     const entries = getEntries(docs, required);
     if (!entries || entries.length === 0) {
       failures.push(`Missing required GAP documentation entry: ${required}`);
@@ -89,6 +89,13 @@ function validateDocs(docs, failures) {
     if (!entries[0].signature || !entries[0].description) {
       failures.push(`Documentation entry ${required} must have a signature and description`);
     }
+  }
+
+  const generatorsEntry = docs.entries.GeneratorsOfGroup && docs.entries.GeneratorsOfGroup[0];
+  if (!generatorsEntry || !Array.isArray(generatorsEntry.blocks)) {
+    failures.push("GeneratorsOfGroup should include structured hover blocks");
+  } else if (!generatorsEntry.blocks.some((block) => block.type === "example" && /GeneratorsOfGroup/.test(block.code))) {
+    failures.push("GeneratorsOfGroup should include its manual example block");
   }
 
   const identifierNames = docs.names.filter(isIdentifier);

@@ -8,6 +8,7 @@ Features:
 - TextMate syntax highlighting for GAP comments, strings, keywords, constants, operators, declarations, and function calls.
 - Semantic highlighting for documented GAP reference symbols.
 - Hover documentation for GAP reference manual functions and operations generated from the local GAP 4.15.1 reference manual HTML files.
+- Structured hovers with section headings, styled inline code, grouped signatures, and GAP examples from the manual.
 - Hover links that open the configured local manual page.
 
 ## Use In VS Code
@@ -20,7 +21,7 @@ code --extensionDevelopmentPath "C:\Users\Ce\Documents\codex_playground\GAP_fron
 
 Open `examples/sample.g`, then hover names such as `SymmetricGroup`, `Size`, or `IsGroup`.
 
-Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines.
+Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
 
 ## Regenerate Documentation Data
 

@@ -64,6 +64,12 @@ function generatedAccessorEntries(docs, name) {
       kind,
       signature: `${name}( obj )`,
       description: `${name} is generated for ${baseName}; it ${action}. ${entry.description || ""}`.trim(),
+      blocks: [
+        {
+          type: "paragraph",
+          markdown: `\`${name}\` is generated for \`${baseName}\`; it ${action}.`
+        }
+      ],
       generated: true
     };
   });

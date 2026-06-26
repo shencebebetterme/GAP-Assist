@@ -91,6 +91,20 @@
           "maximum": 140,
           "description": "Column at which hover signatures and documentation paragraphs are hard-wrapped."
         },
+        "gapReference.hover.maxExamples": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Maximum number of GAP example blocks to show in one hover entry."
+        },
+        "gapReference.hover.maxExampleLines": {
+          "type": "number",
+          "default": 14,
+          "minimum": 2,
+          "maximum": 80,
+          "description": "Maximum number of lines to show from each GAP example block."
+        },
         "gapReference.semanticHighlighting.enabled": {
           "type": "boolean",
           "default": true,
