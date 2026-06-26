@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.10
+
+- Added callback inference for `Filtered`, `ForAll`, and `ForAny`.
+- Preserved collection element filters through `Filtered(...)` results and predicate callback parameters.
+- Added diagnostics for `Filtered`, `ForAll`, and `ForAny` callbacks that clearly return non-boolean values.
+
 ## 0.3.9
 
 - Added `repeat ... until` fallthrough filter flow from positive until predicates.

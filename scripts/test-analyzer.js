@@ -360,4 +360,36 @@ assert(repeatGroup && repeatGroup.returnType.filters.includes("IsList"), "group 
 const repeatCallDiagnostics = repeatUntilAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "call-argument-filter");
 assert.strictEqual(repeatCallDiagnostics.length, 0, "repeat-until group flow should prevent incompatible call diagnostics after the loop");
 
+const predicateCallbackSample = [
+  "G := SymmetricGroup(4);",
+  "gens := GeneratorsOfGroup(G);",
+  "selected := Filtered(gens, g -> IsObject(g));",
+  "allOk := ForAll([1 .. 4], i -> i > 0);",
+  "anyBad := ForAny([1 .. 4], i -> i + 1);",
+  ""
+].join("\n");
+const predicateCallbackAnalysis = analyzer.analyze(predicateCallbackSample, "memory://predicate-callbacks.g");
+const selected = predicateCallbackAnalysis.scopes[0].symbols.get("selected");
+assert(selected && selected.type.filters.includes("IsList"), "Filtered should infer a list result");
+assert(
+  selected.type.element && selected.type.element.filters.includes("IsMultiplicativeElementWithInverse"),
+  "Filtered should preserve the input collection element type"
+);
+const allOk = predicateCallbackAnalysis.scopes[0].symbols.get("allOk");
+assert(allOk && allOk.type.filters.includes("IsBool"), "ForAll should infer a boolean result");
+const filteredHover = predicateCallbackAnalysis.hoverAt(2, 27);
+assert(filteredHover && filteredHover.symbol.name === "g", "Filtered callback hover should resolve the arrow parameter");
+assert(
+  filteredHover.symbol.type.filters.includes("IsMultiplicativeElementWithInverse"),
+  "Filtered callback parameter should inherit collection element filters"
+);
+const forAllHover = predicateCallbackAnalysis.hoverAt(3, 26);
+assert(forAllHover && forAllHover.symbol.name === "i", "ForAll callback hover should resolve the arrow parameter");
+assert(forAllHover.symbol.type.filters.includes("IsInt"), "ForAll callback parameter should use range element filters");
+const callbackDiagnostics = predicateCallbackAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "callback-return-filter");
+assert.strictEqual(callbackDiagnostics.length, 1, "non-boolean predicate callback bodies should be diagnosed");
+assert(callbackDiagnostics[0].message.includes("ForAny callback should return a boolean"), "predicate diagnostic should identify the operation");
+assert(callbackDiagnostics[0].message.includes("got integer"), "predicate diagnostic should include the callback body type");
+assert.strictEqual(callbackDiagnostics[0].range.start.line, 4, "predicate diagnostic should point at the callback body line");
+
 console.log("Analyzer tests passed.");

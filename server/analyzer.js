@@ -1256,8 +1256,8 @@ function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans 
     reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, documented);
   }
 
-  if (name === "List") {
-    return inferListCall(args, scope, data, expressionOffset, argumentSpans);
+  if (["List", "Filtered", "ForAll", "ForAny"].includes(name)) {
+    return inferHigherOrderCollectionCall(name, args, scope, data, expressionOffset, argumentSpans);
   }
 
   if (hardCoded) {
@@ -1281,7 +1281,7 @@ function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans 
   });
 }
 
-function inferListCall(args, scope, data, expressionOffset, argumentSpans) {
+function inferHigherOrderCollectionCall(name, args, scope, data, expressionOffset, argumentSpans) {
   const collectionSpan = argumentSpans[0] || { start: 0 };
   const collectionType = args[0]
     ? inferExpression(args[0], scope, data, expressionOffset + collectionSpan.start)
@@ -1291,16 +1291,50 @@ function inferListCall(args, scope, data, expressionOffset, argumentSpans) {
   const mapper = args[1] ? parseArrowFunctionExpression(args[1]) : undefined;
 
   if (!mapper) {
+    return higherOrderResultType(name, baseElement, undefined, args, scope);
+  }
+
+  const { bodyType } = inferArrowCallback(args[1], mapper, baseElement, scope, data, expressionOffset, argumentSpans[1], `${name} callback parameter`);
+  if (["Filtered", "ForAll", "ForAny"].includes(name)) {
+    reportPredicateCallbackDiagnostic(name, mapper, bodyType, data, expressionOffset, argumentSpans[1] || { start: 0 });
+  }
+
+  return higherOrderResultType(name, baseElement, bodyType, args, scope);
+}
+
+function higherOrderResultType(name, collectionElement, bodyType, args, scope) {
+  if (name === "List") {
     return typeInfo("list", ["IsObject", "IsCollection", "IsList"], {
       confidence: "function",
       source: "List(...)",
-      element: baseElement,
+      element: bodyType || collectionElement,
       arguments: callArguments(args, scope)
     });
   }
 
-  const mapperSpan = argumentSpans[1] || { start: 0, end: args[1].length };
-  const mapperScope = createScope("arrow function", expressionOffset + mapperSpan.start, expressionOffset + mapperSpan.end, scope);
+  if (name === "Filtered") {
+    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], {
+      confidence: "Filtered predicate",
+      source: "Filtered(...)",
+      element: collectionElement,
+      arguments: callArguments(args, scope)
+    });
+  }
+
+  if (name === "ForAll" || name === "ForAny") {
+    return typeInfo("boolean", ["IsObject", "IsBool"], {
+      confidence: `${name} predicate`,
+      source: `${name}(...)`,
+      arguments: callArguments(args, scope)
+    });
+  }
+
+  return typeInfo("GAP object", ["IsObject"], { confidence: "unknown", source: `${name}(...)` });
+}
+
+function inferArrowCallback(argumentText, mapper, firstParameterType, scope, data, expressionOffset, mapperSpan, parameterSource) {
+  const span = mapperSpan || { start: 0, end: argumentText.length };
+  const mapperScope = createScope("arrow function", expressionOffset + span.start, expressionOffset + span.end, scope);
   mapperScope.lineStarts = data.lineStarts;
   if (Array.isArray(data.scopes)) {
     data.scopes.push(mapperScope);
@@ -1308,24 +1342,33 @@ function inferListCall(args, scope, data, expressionOffset, argumentSpans) {
 
   mapper.params.forEach((param, index) => {
     const paramType = index === 0
-      ? (baseElement || typeInfo("collection element", ["IsObject"], { confidence: "unknown" }))
+      ? (firstParameterType || typeInfo("collection element", ["IsObject"], { confidence: "unknown" }))
       : typeInfo("unknown parameter", ["IsObject"], { confidence: "unknown" });
     mapperScope.symbols.set(param.name, {
       name: param.name,
       scope: "parameter",
-      range: rangeFromOffset(data.lineStarts, expressionOffset + mapperSpan.start + param.start),
+      range: rangeFromOffset(data.lineStarts, expressionOffset + span.start + param.start),
       type: paramType,
-      source: "List mapper parameter"
+      source: parameterSource
     });
   });
 
-  const bodyType = inferExpression(mapper.body, mapperScope, data, expressionOffset + mapperSpan.start + mapper.bodyStart);
-  return typeInfo("list", ["IsObject", "IsCollection", "IsList"], {
-    confidence: "List mapper",
-    source: "List(...)",
-    element: bodyType,
-    arguments: callArguments(args, scope)
-  });
+  const bodyType = inferExpression(mapper.body, mapperScope, data, expressionOffset + span.start + mapper.bodyStart);
+  return { scope: mapperScope, bodyType };
+}
+
+function reportPredicateCallbackDiagnostic(name, mapper, bodyType, data, expressionOffset, mapperSpan) {
+  if (!isClearlyNonBoolean(bodyType)) {
+    return;
+  }
+
+  reportDiagnostic(
+    data,
+    expressionOffset + mapperSpan.start + mapper.bodyStart,
+    Math.max(1, mapper.body.length),
+    `${name} callback should return a boolean; got ${formatTypeLabel(bodyType)}.`,
+    { code: "callback-return-filter", severity: 2 }
+  );
 }
 
 function parseArrowFunctionExpression(expression) {

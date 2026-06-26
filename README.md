@@ -39,6 +39,8 @@ The same compatibility check is applied to user-defined functions once their par
 
 Common mapper calls are analyzed as well. In `List([1 .. 4], i -> Factorial(i))`, the arrow parameter `i` is treated as an integer from the range element type, the result is inferred as a list of positive integers, and mistakes inside the mapper body can produce diagnostics.
 
+Predicate callback calls are checked too. `Filtered(gens, g -> IsObject(g))` preserves the generator element filters in the filtered list, while `ForAll([1 .. 4], i -> i + 1)` is reported because the predicate body returns an integer instead of a boolean.
+
 Loop variables also receive iterator element filters. In `for i in [1 .. 4] do`, `i` is treated as an integer inside the loop body; in `for g in GeneratorsOfGroup(G) do`, `g` inherits the generator element filters.
 
 Loop conditions can refine symbols too. Inside `while IsString(obj) do`, the analyzer treats `obj` as satisfying `IsString` for hovers, return inference, and diagnostics in the loop body.
