@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Changed hover reference links to direct `file:///...#anchor` URLs.
+
 ## 0.1.1
 
 - Added configurable GAP installation path.

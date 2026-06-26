@@ -54,6 +54,7 @@ class GapHoverProvider {
     const wrapColumn = config.get("hover.wrapColumn", 86);
     const maxExamples = config.get("hover.maxExamples", 1);
     const maxExampleLines = config.get("hover.maxExampleLines", 14);
+    const manualPath = resolveManualPath(config, this.docs);
     const entryGroups = groupEntries(entries);
     const shownEntryGroups = entryGroups.slice(0, maxEntries);
 
@@ -90,7 +91,12 @@ class GapHoverProvider {
         appendWrappedText(markdown, truncate(group.entry.description, maxDescriptionLength), wrapColumn);
       }
 
-      markdown.appendMarkdown(`[$(book) Open full local GAP reference](${manualCommandUri(group.entry)})`);
+      const referenceUrl = manualPath ? manualSectionUrl(path.join(manualPath, group.entry.file), group.entry.anchor) : undefined;
+      if (referenceUrl) {
+        markdown.appendMarkdown(`[$(book) Open full local GAP reference](${referenceUrl})`);
+      } else {
+        markdown.appendMarkdown(`[$(book) Open full local GAP reference](${manualCommandUri(group.entry)})`);
+      }
 
       if (index < shownEntryGroups.length - 1) {
         markdown.appendMarkdown("\n\n---\n\n");
@@ -395,9 +401,12 @@ function normalizeSettingPath(value) {
 }
 
 function manualSectionUri(filePath, anchor) {
+  return vscode.Uri.parse(manualSectionUrl(filePath, anchor));
+}
+
+function manualSectionUrl(filePath, anchor) {
   const url = pathToFileURL(filePath).toString();
-  const urlWithAnchor = anchor ? `${url}#${encodeURIComponent(anchor)}` : url;
-  return vscode.Uri.parse(urlWithAnchor);
+  return anchor ? `${url}#${encodeURIComponent(anchor)}` : url;
 }
 
 function truncate(text, maxLength) {
