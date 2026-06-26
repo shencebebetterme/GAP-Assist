@@ -167,4 +167,38 @@ assert.strictEqual(callDiagnostics[0].range.start.line, 1, "direct call diagnost
 assert(callDiagnostics[1].message.includes("got string"), "branch call diagnostic should use the branch-refined type");
 assert.strictEqual(callDiagnostics[1].range.start.line, 8, "branch call diagnostic should point at the guarded bad call line");
 
+const userFunctionCallSample = [
+  "uses := function(obj)",
+  "    local gens;",
+  "    gens := GeneratorsOfGroup(obj);",
+  "    return gens;",
+  "end;",
+  "",
+  "uses(5);",
+  "G := SymmetricGroup(3);",
+  "uses(G);",
+  "",
+  "guarded := function(obj)",
+  "    if IsGroup(obj) then",
+  "        return uses(obj);",
+  "    fi;",
+  "    if IsString(obj) then",
+  "        return uses(obj);",
+  "    fi;",
+  "    return [];",
+  "end;",
+  ""
+].join("\n");
+const userFunctionCallAnalysis = analyzer.analyze(userFunctionCallSample, "memory://user-calls.g");
+const userCallDiagnostics = userFunctionCallAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "user-call-argument-filter");
+assert.strictEqual(userCallDiagnostics.length, 2, "inferred user-function parameter calls should be diagnosed when incompatible");
+assert(userCallDiagnostics[0].message.includes("uses argument 1 may fail"), "user call diagnostic should identify the function");
+assert(userCallDiagnostics[0].message.includes("expects `IsMagmaWithInverses`"), "user call diagnostic should include inferred parameter filters");
+assert(userCallDiagnostics[0].message.includes("got integer"), "direct user call diagnostic should use the inferred argument type");
+assert.strictEqual(userCallDiagnostics[0].range.start.line, 6, "direct user call diagnostic should point at the call argument");
+assert(userCallDiagnostics[1].message.includes("got string"), "branch user call diagnostic should use branch-refined filters");
+assert.strictEqual(userCallDiagnostics[1].range.start.line, 15, "branch user call diagnostic should point at the guarded call argument");
+const usesAfterBadCall = userFunctionCallAnalysis.scopes[0].symbols.get("uses");
+assert(!usesAfterBadCall.parameters[0].type.filters.includes("IsInt"), "bad call-site evidence should not pollute inferred parameter filters");
+
 console.log("Analyzer tests passed.");

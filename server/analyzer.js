@@ -673,6 +673,9 @@ function refineFunctionParametersFromCallSites(text, masked, functions, globalSc
       if (!argumentType || !argumentType.filters || argumentType.filters.length === 0 || argumentType.confidence === "unknown") {
         return;
       }
+      if (isClearlyIncompatibleWithExpectedFilters(argumentType, parameter.type && parameter.type.filters)) {
+        return;
+      }
 
       refineSymbolWithExpectedFilters(parameter, argumentType.filters, `${call.name} call argument ${index + 1}`);
     });
@@ -1019,12 +1022,18 @@ function reportDiagnostic(data, offset, length, message, options = {}) {
 }
 
 function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans = []) {
+  const local = lookupSymbol(scope, name);
+  if (local && local.returnType) {
+    reportUserFunctionCallDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, local);
+    return local.returnType;
+  }
+
   const documented = documentedCallableInfo(name, data);
+  const hardCoded = HARD_CODED_CALLS[name];
   if (documented) {
     reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, documented);
   }
 
-  const hardCoded = HARD_CODED_CALLS[name];
   if (hardCoded) {
     return addCallContext(hardCoded(), name, args, scope);
   }
@@ -1036,11 +1045,6 @@ function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans 
     });
   }
 
-  const local = lookupSymbol(scope, name);
-  if (local && local.returnType) {
-    return local.returnType;
-  }
-
   if (documented) {
     return documented.returnType || documented.type;
   }
@@ -1049,6 +1053,54 @@ function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans 
     confidence: "unknown",
     source: `${name}(...)`
   });
+}
+
+function reportUserFunctionCallDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, symbol) {
+  const parameterTypes = userFunctionParameterTypes(symbol);
+  if (!Array.isArray(parameterTypes) || parameterTypes.length === 0) {
+    return;
+  }
+
+  args.forEach((argument, index) => {
+    const expected = parameterTypes[index];
+    if (!expected || !expected.type || !expected.type.filters || expected.type.filters.length === 0) {
+      return;
+    }
+
+    const span = argumentSpans[index] || { text: argument, start: 0, end: argument.length };
+    const actual = inferExpression(argument, scope, data, expressionOffset + span.start);
+    if (!isClearlyIncompatibleWithExpectedFilters(actual, expected.type.filters)) {
+      return;
+    }
+
+    const parameterName = expected.name || `arg${index + 1}`;
+    reportDiagnostic(
+      data,
+      expressionOffset + span.start,
+      Math.max(1, span.text.trim().length),
+      `${name} argument ${index + 1} may fail: inferred parameter ${parameterName} expects ${formatFilterExpectation(expected.type.filters)}, got ${formatTypeLabel(actual)}.`,
+      { code: "user-call-argument-filter", severity: 2 }
+    );
+  });
+}
+
+function userFunctionParameterTypes(symbol) {
+  if (Array.isArray(symbol.parameters) && symbol.parameters.length > 0) {
+    return symbol.parameters.map((parameter, index) => ({
+      name: parameter.name || `arg${index + 1}`,
+      type: parameter.type
+    }));
+  }
+
+  const type = symbol.type || {};
+  if (Array.isArray(type.parameterTypes) && type.parameterTypes.length > 0) {
+    return type.parameterTypes.map((parameterType, index) => ({
+      name: type.parameters && type.parameters[index] ? type.parameters[index] : `arg${index + 1}`,
+      type: parameterType
+    }));
+  }
+
+  return [];
 }
 
 function reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, callable) {
@@ -1080,16 +1132,24 @@ function reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset
 }
 
 function isClearlyIncompatibleWithExpectedFilters(actual, expectedFilters) {
+  if (!Array.isArray(expectedFilters) || expectedFilters.length === 0) {
+    return false;
+  }
   if (!actual || actual.confidence === "unknown" || !Array.isArray(actual.filters) || actual.filters.length === 0) {
     return false;
   }
 
-  const actualFilters = expandedFilters(actual.filters);
-  if (expectedFilters.some((filter) => actualFilters.has(filter))) {
+  const meaningfulExpectedFilters = expectedFilters.filter((filter) => filter !== "IsObject");
+  if (meaningfulExpectedFilters.length === 0) {
     return false;
   }
 
-  const expectedFamilies = new Set(expectedFilters.map(filterFamily).filter(Boolean));
+  const actualFilters = expandedFilters(actual.filters);
+  if (meaningfulExpectedFilters.some((filter) => actualFilters.has(filter))) {
+    return false;
+  }
+
+  const expectedFamilies = new Set(meaningfulExpectedFilters.map(filterFamily).filter(Boolean));
   if (expectedFamilies.size === 0) {
     return false;
   }
@@ -1175,7 +1235,7 @@ function filterFamily(filter) {
 }
 
 function hasAnyConcreteFamily(families) {
-  return families.size > 0 && !families.has(undefined);
+  return [...families].some(Boolean);
 }
 
 function formatFilterExpectation(filters) {

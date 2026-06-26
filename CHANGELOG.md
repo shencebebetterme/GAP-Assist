@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Added diagnostics for calls to user-defined functions when inferred parameter filters are clearly incompatible with the argument type.
+- Kept bad user-function call-sites from polluting inferred parameter contracts.
+- Applied branch-refined filters to user-function call checks.
+
 ## 0.3.2
 
 - Added declaration-filter call diagnostics for clearly incompatible GAP operation arguments.

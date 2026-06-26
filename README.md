@@ -35,6 +35,8 @@ The analyzer also performs limited branch-sensitive filter flow. Inside a guarde
 
 Call checking uses GAP declaration filters where available. For example, `GeneratorsOfGroup(5);` is reported because `GeneratorsOfGroup` resolves to a declaration requiring `IsMagmaWithInverses`, while a call guarded by `if IsGroup(obj) then` is treated as compatible in that branch.
 
+The same compatibility check is applied to user-defined functions once their parameter filters have been inferred from the function body. For example, a function that calls `GeneratorsOfGroup(obj)` learns that `obj` should be group-like, and later calls with clearly incompatible arguments are reported without feeding that bad evidence back into the function contract.
+
 Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
 
 ## Regenerate Documentation Data
