@@ -975,7 +975,15 @@ function inferExpression(expression, scope, data, expressionOffset = 0) {
     return typeInfo("fail", ["IsObject"], { confidence: "literal" });
   }
   if (/^-?\d+$/.test(expr)) {
-    return typeInfo("integer", ["IsObject", "IsInt"], { confidence: "literal" });
+    const value = Number.parseInt(expr, 10);
+    const filters = ["IsObject", "IsInt"];
+    if (value >= 0) {
+      filters.push("IsNonnegativeInt");
+    }
+    if (value > 0) {
+      filters.push("IsPosInt");
+    }
+    return typeInfo("integer", filters, { confidence: "literal" });
   }
   if (/^-?\d+\s*\/\s*-?\d+$/.test(expr)) {
     return typeInfo("rational", ["IsObject", "IsRat"], { confidence: "literal" });
@@ -993,9 +1001,17 @@ function inferExpression(expression, scope, data, expressionOffset = 0) {
   if (/^\([^)]*(?:,\s*\d+)+\)$/.test(expr)) {
     return typeInfo("permutation", ["IsObject", "IsPerm"], { confidence: "literal" });
   }
+  const unwrapped = stripBalancedParens(expr);
+  if (unwrapped !== expr) {
+    return inferExpression(unwrapped, scope, data, expressionOffset + expr.indexOf(unwrapped));
+  }
   const binary = parseBinaryExpression(expr);
   if (binary) {
     return inferBinaryExpression(binary, scope, data, expressionOffset);
+  }
+  const unaryNot = parseUnaryNotExpression(expr);
+  if (unaryNot) {
+    return inferUnaryNotExpression(unaryNot, scope, data, expressionOffset);
   }
   const call = parseCallExpression(expr);
   if (call) {
@@ -1046,11 +1062,21 @@ function inferListElementType(expr, scope, data, expressionOffset = 0) {
 }
 
 function inferBinaryExpression(binary, scope, data, expressionOffset) {
+  const operatorOffset = expressionOffset + binary.operatorStart;
+  if (binary.nonAssociative) {
+    reportDiagnostic(
+      data,
+      operatorOffset,
+      binary.operator.length,
+      `Operator ${binary.operator} is not associative in GAP; add parentheses to choose the grouping.`
+    );
+    return typeInfo(`invalid ${binary.operator} expression`, ["IsObject"], { confidence: "syntax" });
+  }
+
   const leftType = inferExpression(binary.left, scope, data, expressionOffset + binary.leftStart);
   const rightType = inferExpression(binary.right, scope, data, expressionOffset + binary.rightStart);
-  const operatorOffset = expressionOffset + binary.operatorStart;
 
-  if (["+", "-", "*", "/"].includes(binary.operator)) {
+  if (["+", "-", "*", "/", "mod", "^"].includes(binary.operator)) {
     if (isNumericType(leftType) && isNumericType(rightType)) {
       return numericBinaryResult(binary.operator, leftType, rightType);
     }
@@ -1066,6 +1092,18 @@ function inferBinaryExpression(binary, scope, data, expressionOffset) {
     }
 
     return typeInfo(`unknown result of ${binary.operator}`, ["IsObject"], { confidence: "operator" });
+  }
+
+  if (binary.operator === "in") {
+    if (isClearlyInvalidMembershipContainer(rightType)) {
+      reportDiagnostic(
+        data,
+        operatorOffset,
+        binary.operator.length,
+        `Operator in may fail: right operand is ${formatTypeLabel(rightType)}, expected a list or collection.`
+      );
+    }
+    return typeInfo("boolean", ["IsObject", "IsBool"], { confidence: "operator" });
   }
 
   if (["=", "<>", "<", "<=", ">", ">="].includes(binary.operator)) {
@@ -1087,9 +1125,30 @@ function inferBinaryExpression(binary, scope, data, expressionOffset) {
   return typeInfo(`unknown result of ${binary.operator}`, ["IsObject"], { confidence: "operator" });
 }
 
+function inferUnaryNotExpression(unary, scope, data, expressionOffset) {
+  const operandType = inferExpression(unary.operand, scope, data, expressionOffset + unary.operandStart);
+  if (unary.count % 2 === 0) {
+    return operandType;
+  }
+
+  if (isClearlyNonBoolean(operandType)) {
+    reportDiagnostic(
+      data,
+      expressionOffset + unary.operatorStart,
+      "not".length,
+      `Operator not expects a boolean operand; got ${formatTypeLabel(operandType)}.`
+    );
+  }
+
+  return typeInfo("boolean", ["IsObject", "IsBool"], { confidence: "operator" });
+}
+
 function numericBinaryResult(operator, leftType, rightType) {
   if (operator === "/" || hasAnyFilter(leftType, ["IsRat"]) || hasAnyFilter(rightType, ["IsRat"])) {
     return typeInfo("rational", ["IsObject", "IsRat"], { confidence: "operator" });
+  }
+  if (operator === "^" && !hasAnyFilter(rightType, ["IsPosInt", "IsNonnegativeInt"])) {
+    return typeInfo("number", ["IsObject", "IsRat"], { confidence: "operator" });
   }
   return typeInfo("integer", ["IsObject", "IsInt"], { confidence: "operator" });
 }
@@ -1098,9 +1157,10 @@ function parseBinaryExpression(expr) {
   const groups = [
     ["or"],
     ["and"],
-    ["<>", "<=", ">=", "=", "<", ">"],
+    ["<>", "<=", ">=", "=", "<", ">", "in"],
     ["+", "-"],
-    ["*", "/"]
+    ["*", "/", "mod"],
+    ["^"]
   ];
 
   for (const operators of groups) {
@@ -1121,11 +1181,43 @@ function parseBinaryExpression(expr) {
       left,
       leftStart: leadingWhitespaceLength(expr.slice(0, found.index)),
       right,
-      rightStart: found.index + found.operator.length + leadingWhitespaceLength(expr.slice(found.index + found.operator.length))
+      rightStart: found.index + found.operator.length + leadingWhitespaceLength(expr.slice(found.index + found.operator.length)),
+      nonAssociative: found.operator === "^" && topLevelOperatorCount(expr, "^") > 1
     };
   }
 
   return undefined;
+}
+
+function parseUnaryNotExpression(expr) {
+  let index = 0;
+  let count = 0;
+  let firstOperatorStart;
+
+  while (expr.slice(index).startsWith("not") && hasWordBoundaries(expr, index, index + "not".length)) {
+    if (firstOperatorStart === undefined) {
+      firstOperatorStart = index;
+    }
+    count += 1;
+    index += "not".length;
+    index += leadingWhitespaceLength(expr.slice(index));
+  }
+
+  if (count === 0) {
+    return undefined;
+  }
+
+  const operand = expr.slice(index).trim();
+  if (!operand) {
+    return undefined;
+  }
+
+  return {
+    operatorStart: firstOperatorStart,
+    count,
+    operand,
+    operandStart: index + leadingWhitespaceLength(expr.slice(index))
+  };
 }
 
 function findTopLevelOperator(expr, operators) {
@@ -1185,6 +1277,51 @@ function findTopLevelOperator(expr, operators) {
   return undefined;
 }
 
+function topLevelOperatorCount(expr, operator) {
+  let count = 0;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < expr.length; index += 1) {
+    const char = expr[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "(" || char === "[" || char === "{") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")" || char === "]" || char === "}") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0) {
+      continue;
+    }
+
+    if (expr.slice(index, index + operator.length) === operator) {
+      count += 1;
+      index += operator.length - 1;
+    }
+  }
+
+  return count;
+}
+
 function isWordOperator(operator) {
   return /^[A-Za-z]+$/.test(operator);
 }
@@ -1195,7 +1332,7 @@ function hasWordBoundaries(text, start, end) {
 
 function isUnarySign(expr, index) {
   const before = expr.slice(0, index).trimEnd();
-  return !before || /(?:[([{,=<>+\-*/]|:=)$/.test(before);
+  return !before || /(?:[([{,=<>+\-*/^]|:=)$/.test(before) || /\b(?:and|in|mod|not|or)$/.test(before);
 }
 
 function isNumericType(type) {
@@ -1219,6 +1356,16 @@ function isClearlyInvalidArithmeticOperand(type) {
 
 function isClearlyNonBoolean(type) {
   return type && type.confidence !== "unknown" && !hasAnyFilter(type, ["IsBool"]);
+}
+
+function isClearlyInvalidMembershipContainer(type) {
+  if (!type || type.confidence === "unknown") {
+    return false;
+  }
+  if (hasAnyFilter({ filters: [...expandedFilters(type.filters || [])] }, ["IsListOrCollection", "IsCollection", "IsList", "IsDenseList", "IsString"])) {
+    return false;
+  }
+  return hasAnyConcreteFamily(new Set([...expandedFilters(type.filters || [])].map(filterFamily).filter(Boolean)));
 }
 
 function hasAnyFilter(type, filters) {

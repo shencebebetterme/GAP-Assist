@@ -122,6 +122,40 @@ assert.strictEqual(operatorAnalysis.diagnostics.length, 1, "invalid string arith
 assert(operatorAnalysis.diagnostics[0].message.includes("Operator + may fail"), "diagnostic should explain the operator risk");
 assert.strictEqual(operatorAnalysis.diagnostics[0].range.start.line, 3, "diagnostic should point at the invalid operator line");
 
+const operatorSemanticsSample = [
+  "n := 5;",
+  "modValue := n mod 2;",
+  "powerValue := n ^ 2;",
+  "contains := 1 in [1 .. 3];",
+  "negated := not contains;",
+  "doubleNotNumber := not not n;",
+  "badNot := not n;",
+  "badMembership := 1 in n;",
+  "badMod := \"hello\" mod 2;",
+  "badPower := \"hello\" ^ 2;",
+  "badPowerGrouping := 2 ^ 3 ^ 4;",
+  ""
+].join("\n");
+const operatorSemanticsAnalysis = analyzer.analyze(operatorSemanticsSample, "memory://operator-semantics.g");
+const operatorSemanticsScope = operatorSemanticsAnalysis.scopes[0];
+const modValue = operatorSemanticsScope.symbols.get("modValue");
+assert(modValue && modValue.type.filters.includes("IsInt"), "integer mod should infer an integer result");
+const powerValue = operatorSemanticsScope.symbols.get("powerValue");
+assert(powerValue && powerValue.type.filters.includes("IsInt"), "positive integer power should infer an integer result");
+const contains = operatorSemanticsScope.symbols.get("contains");
+assert(contains && contains.type.filters.includes("IsBool"), "membership should infer a boolean result");
+const negated = operatorSemanticsScope.symbols.get("negated");
+assert(negated && negated.type.filters.includes("IsBool"), "unary not should infer a boolean result");
+const doubleNotNumber = operatorSemanticsScope.symbols.get("doubleNotNumber");
+assert(doubleNotNumber && doubleNotNumber.type.filters.includes("IsInt"), "GAP even-count not should preserve the operand type");
+const operatorSemanticMessages = operatorSemanticsAnalysis.diagnostics.map((diagnostic) => diagnostic.message);
+assert.strictEqual(operatorSemanticMessages.length, 5, "new operator checks should report the five clear failures");
+assert(operatorSemanticMessages.some((message) => message.includes("Operator not expects a boolean operand")), "not should diagnose clear non-boolean operands");
+assert(operatorSemanticMessages.some((message) => message.includes("Operator in may fail")), "in should diagnose clear non-collection right operands");
+assert(operatorSemanticMessages.some((message) => message.includes("Operator mod may fail")), "mod should reuse arithmetic diagnostics");
+assert(operatorSemanticMessages.some((message) => message.includes("Operator ^ may fail")), "power should reuse arithmetic diagnostics");
+assert(operatorSemanticMessages.some((message) => message.includes("Operator ^ is not associative")), "power should diagnose GAP's non-associative syntax");
+
 const flowSample = [
   "flow := function(obj)",
   "    if IsString(obj) then",

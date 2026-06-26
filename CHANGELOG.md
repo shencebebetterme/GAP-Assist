@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11
+
+- Added GAP-reader-aligned inference for unary `not`, `mod`, `^`, and membership `in` expressions.
+- Added diagnostics for clear operator failures such as non-boolean `not`, non-collection membership containers, invalid `mod`/`^` operands, and non-associative chained `^`.
+- Tagged integer literals with positive and nonnegative filters when applicable.
+
 ## 0.3.10
 
 - Added callback inference for `Filtered`, `ForAll`, and `ForAny`.

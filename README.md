@@ -29,7 +29,7 @@ Static inference is filter-centric. A GAP value is shown with every filter the a
 
 User-defined functions also get best-effort input filters. For example, if a parameter is passed to `Size(obj)` or `GeneratorsOfGroup(obj)`, the hover can show GAP declaration filters such as `IsListOrCollection` or `IsMagmaWithInverses`; if the function is later called with `SymmetricGroup(4)`, those call-site filters are merged as additional evidence.
 
-Operator inference currently covers common arithmetic, comparison, and boolean forms. For example `m := n + 10;` can infer `m` as an integer after `n := 5;`, while `b := "hello" + 2;` is reported as a likely operator error.
+Operator inference currently covers common arithmetic, comparison, boolean, membership, `mod`, and power forms following the precedence in GAP's reader. For example `m := n + 10;` can infer `m` as an integer after `n := 5;`, while `b := "hello" + 2;`, `not 3`, `1 in 5`, or `2 ^ 3 ^ 4` are reported as likely operator errors.
 
 The analyzer also performs limited branch-sensitive filter flow. Inside a guarded block such as `if IsString(obj) then`, hovers, return inference, and operator diagnostics use `IsString` as evidence for `obj` in that branch.
 
