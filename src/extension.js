@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const vscode = require("vscode");
@@ -25,7 +26,7 @@ function activate(context) {
       new GapSemanticTokensProvider(docs),
       SEMANTIC_LEGEND
     ),
-    vscode.commands.registerCommand("gapReference.openLocalManual", (target) => openLocalManual(docs, target))
+    vscode.commands.registerCommand("gapReference.openLocalManual", (target) => openLocalManual(context, docs, target))
   );
 }
 
@@ -360,7 +361,7 @@ function escapeMarkdown(text) {
   return text.replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&");
 }
 
-async function openLocalManual(docs, target) {
+async function openLocalManual(context, docs, target) {
   if (!target || !target.file) {
     return;
   }
@@ -372,7 +373,8 @@ async function openLocalManual(docs, target) {
     return;
   }
 
-  const uri = manualSectionUri(path.join(manualPath, target.file), target.anchor);
+  const url = manualSectionUrl(path.join(manualPath, target.file), target.anchor);
+  const uri = await manualRedirectUri(context, url);
   await vscode.env.openExternal(uri);
 }
 
@@ -395,9 +397,41 @@ function normalizeSettingPath(value) {
 }
 
 function manualSectionUri(filePath, anchor) {
+  return vscode.Uri.parse(manualSectionUrl(filePath, anchor));
+}
+
+function manualSectionUrl(filePath, anchor) {
   const url = pathToFileURL(filePath).toString();
-  const urlWithAnchor = anchor ? `${url}#${encodeURIComponent(anchor)}` : url;
-  return vscode.Uri.parse(urlWithAnchor);
+  return anchor ? `${url}#${encodeURIComponent(anchor)}` : url;
+}
+
+async function manualRedirectUri(context, targetUrl) {
+  const storagePath = context.globalStorageUri.fsPath;
+  await fs.promises.mkdir(storagePath, { recursive: true });
+
+  const redirectPath = path.join(storagePath, "open-gap-reference.html");
+  const html = `<!doctype html>
+<meta charset="utf-8">
+<title>Open GAP Reference</title>
+<meta http-equiv="refresh" content="0; url=${escapeHtmlAttribute(targetUrl)}">
+<script>
+location.replace(${JSON.stringify(targetUrl)});
+</script>
+<p>Opening <a href="${escapeHtmlAttribute(targetUrl)}">${escapeHtml(targetUrl)}</a></p>
+`;
+  await fs.promises.writeFile(redirectPath, html, "utf8");
+  return vscode.Uri.file(redirectPath);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttribute(value) {
+  return escapeHtml(value).replace(/"/g, "&quot;");
 }
 
 function truncate(text, maxLength) {

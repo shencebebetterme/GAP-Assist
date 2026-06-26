@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fixed local manual section links on Windows by opening through a browser redirect page that preserves anchors.
+
 ## 0.1.1
 
 - Added configurable GAP installation path.
