@@ -90,7 +90,15 @@ async function main() {
         uri: "memory://sample.g",
         languageId: "gap",
         version: 1,
-        text: "G := SymmetricGroup(4);\nSize(G);\n"
+        text: [
+          "G := SymmetricGroup(4);",
+          "Size(G);",
+          "uses := function(obj)",
+          "    return Size(obj);",
+          "end;",
+          "uses(G);",
+          ""
+        ].join("\n")
       }
     }
   });
@@ -130,6 +138,25 @@ async function main() {
   const sizeHover = await waitForResponse(4);
   assert(sizeHover.result.contents.value.includes("Input filters"), "hover should include declaration input filters");
   assert(sizeHover.result.contents.value.includes("IsListOrCollection"), "hover should include Size input filter");
+
+  send({
+    id: 5,
+    method: "textDocument/hover",
+    params: {
+      textDocument: {
+        uri: "memory://sample.g"
+      },
+      position: {
+        line: 2,
+        character: 1
+      }
+    }
+  });
+
+  const functionHover = await waitForResponse(5);
+  assert(functionHover.result.contents.value.includes("Input filters"), "function hover should include inferred input filters");
+  assert(functionHover.result.contents.value.includes("IsListOrCollection"), "function hover should include body-derived parameter filters");
+  assert(functionHover.result.contents.value.includes("IsPermGroup"), "function hover should include call-site parameter filters");
 
   send({ id: 3, method: "shutdown", params: null });
   await waitForResponse(3);

@@ -15,6 +15,7 @@ const REQUIRED_FILES = [
   "server/lsp-server.js",
   "src/docs.js",
   "src/extension.js",
+  "src/lspClient.js",
   "data/gap-docs.json"
 ];
 
@@ -58,7 +59,14 @@ function main() {
     }
   }
 
-  for (const file of ["server/analyzer.js", "server/lsp-server.js", "scripts/test-analyzer.js", "scripts/test-lsp-server.js"]) {
+  for (const file of [
+    "server/analyzer.js",
+    "server/lsp-server.js",
+    "src/lspClient.js",
+    "scripts/test-analyzer.js",
+    "scripts/test-lsp-server.js",
+    "scripts/test-lsp-client.js"
+  ]) {
     try {
       childProcess.execFileSync(process.execPath, ["--check", path.join(ROOT, file)], {
         stdio: "pipe"

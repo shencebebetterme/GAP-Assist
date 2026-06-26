@@ -9,7 +9,8 @@ Features:
 - Semantic highlighting for documented GAP reference symbols.
 - Hover documentation for GAP reference manual functions and operations generated from the local GAP 4.15.1 reference manual HTML files.
 - Structured hovers with section headings, styled inline code, grouped signatures, and GAP examples from the manual.
-- Static GAP inference hovers for globals, locals, functions, return values, and filter sets.
+- Static GAP inference hovers for globals, locals, functions, return values, input filters, and filter sets.
+- Local stdio GAP language server used by the extension for inference hovers.
 - Hover links that open the configured local manual page.
 
 ## Use In VS Code
@@ -23,6 +24,8 @@ code --extensionDevelopmentPath "C:\Users\Ce\Documents\codex_playground\GAP_fron
 Open `examples/sample.g`, then hover names such as `SymmetricGroup`, `Size`, or `IsGroup`.
 
 Static inference is filter-centric. A GAP value is shown with every filter the analyzer can infer, for example `SymmetricGroup(4)` is a group object satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`; this avoids pretending GAP has a single classical OO inheritance type.
+
+User-defined functions also get best-effort input filters. For example, if a parameter is passed to `Size(obj)` or `GeneratorsOfGroup(obj)`, the hover can show GAP declaration filters such as `IsListOrCollection` or `IsMagmaWithInverses`; if the function is later called with `SymmetricGroup(4)`, those call-site filters are merged as additional evidence.
 
 Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
 
@@ -70,6 +73,6 @@ The independent analyzer and minimal stdio language server live in `server/`.
 npm run language-server
 ```
 
-The VS Code extension currently calls the analyzer directly for hover inference. The LSP wrapper exposes the same engine for future clients and currently supports initialization, document sync, and hover.
+The VS Code extension uses a lightweight local client in `src/lspClient.js` to request inference hovers from this server. The server currently supports initialization, full document sync, and hover; the extension still renders the manual documentation locally and falls back to the in-process analyzer if the server is unavailable.
 
 The generated documentation snippets come from the installed GAP reference manual. Keep GAP documentation licensing in mind if you redistribute the extension.

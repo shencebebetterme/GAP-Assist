@@ -42,11 +42,13 @@ function analyzeGapText(text, docs, uri = "", declarations = { declarations: {},
   const lineStarts = computeLineStarts(text);
   const masked = maskCommentsAndStrings(text);
   const globalScope = createScope("global", 0, text.length, undefined);
+  globalScope.lineStarts = lineStarts;
   const data = { docs, declarations };
   const functions = parseFunctionAssignments(text, masked, lineStarts, globalScope, data);
 
   const functionRanges = functions.map((fn) => [fn.start, fn.end]);
   parseAssignments(text, masked, globalScope, data, functionRanges);
+  refineFunctionParametersFromCallSites(text, masked, functions, globalScope, data);
 
   const document = {
     uri,
@@ -105,6 +107,7 @@ function parseFunctionAssignments(text, masked, lineStarts, globalScope, data) {
 
     const body = text.slice(bodyStart, end);
     const scope = createScope(`function ${name}`, match.index, end + 4, globalScope);
+    scope.lineStarts = lineStarts;
     const paramSymbols = params.map((param) => ({
       name: param,
       scope: "parameter",
@@ -119,8 +122,11 @@ function parseFunctionAssignments(text, masked, lineStarts, globalScope, data) {
 
     parseLocalDeclarations(body, bodyStart, lineStarts, scope);
     parseAssignments(text.slice(bodyStart, end), masked.slice(bodyStart, end), scope, data, [], bodyStart);
+    refineSymbolsFromCallArgumentFilters(body, masked.slice(bodyStart, end), scope, data, bodyStart);
     const returnType = inferReturnType(body, bodyStart, scope, data);
-    const fnType = functionType(params, returnType);
+    const fnType = functionType(params, returnType, {
+      parameterTypes: paramSymbols.map((parameter) => parameter.type)
+    });
 
     const functionSymbol = {
       name,
@@ -138,6 +144,7 @@ function parseFunctionAssignments(text, masked, lineStarts, globalScope, data) {
       start: match.index,
       end: end + 4,
       scope,
+      symbol: functionSymbol,
       parameters: paramSymbols,
       returnType
     });
@@ -166,11 +173,86 @@ function parseAssignments(text, masked, scope, data, excludedRanges = [], baseOf
     scope.symbols.set(name, {
       name,
       scope: scope.kind === "global" ? "global" : "local",
-      range: rangeFromOffset(scope.lineStarts || computeLineStarts(text), match.index),
+      range: rangeFromOffset(scope.lineStarts || computeLineStarts(text), baseOffset + match.index),
       type: inferred,
       source: rawExpression
     });
   }
+}
+
+function refineSymbolsFromCallArgumentFilters(text, masked, scope, data, baseOffset = 0) {
+  for (const call of findCalls(text, masked, baseOffset)) {
+    const callable = documentedCallableInfo(call.name, data);
+    const parameterTypes = callable && callable.type && callable.type.parameterTypes;
+    if (!parameterTypes || parameterTypes.length === 0) {
+      continue;
+    }
+
+    call.args.forEach((argument, index) => {
+      const parameterType = parameterTypes[index];
+      if (!parameterType || !parameterType.filters || parameterType.filters.length === 0) {
+        return;
+      }
+
+      const argumentName = argument.trim();
+      if (!IDENTIFIER_RE.test(argumentName)) {
+        return;
+      }
+
+      const symbol = lookupSymbol(scope, argumentName);
+      if (!symbol) {
+        return;
+      }
+
+      refineSymbolWithExpectedFilters(symbol, parameterType.filters, `${call.name} argument ${index + 1}`);
+    });
+  }
+}
+
+function refineFunctionParametersFromCallSites(text, masked, functions, globalScope, data) {
+  if (functions.length === 0) {
+    return;
+  }
+
+  for (const call of findCalls(text, masked, 0)) {
+    const fn = functions.find((candidate) => candidate.name === call.name);
+    if (!fn || isInExcludedRange(call.start, functions.map((candidate) => [candidate.start, candidate.end]))) {
+      continue;
+    }
+
+    call.args.forEach((argument, index) => {
+      const parameter = fn.parameters[index];
+      if (!parameter) {
+        return;
+      }
+
+      const argumentType = inferExpression(argument, globalScope, data);
+      if (!argumentType || !argumentType.filters || argumentType.filters.length === 0 || argumentType.confidence === "unknown") {
+        return;
+      }
+
+      refineSymbolWithExpectedFilters(parameter, argumentType.filters, `${call.name} call argument ${index + 1}`);
+    });
+
+    fn.symbol.type = functionType(fn.parameters.map((parameter) => parameter.name), fn.returnType, {
+      parameterTypes: fn.parameters.map((parameter) => parameter.type)
+    });
+  }
+}
+
+function refineSymbolWithExpectedFilters(symbol, filters, source) {
+  const existing = symbol.type || typeInfo("unknown", ["IsObject"], { confidence: "unknown" });
+  const canRefine = symbol.scope === "parameter" || existing.confidence === "unknown" || /^unknown /.test(existing.label || "");
+  if (!canRefine) {
+    return;
+  }
+
+  const mergedFilters = sortedUnique([...(existing.filters || []), ...filters]);
+  const label = symbol.scope === "parameter" ? "parameter" : existing.label;
+  symbol.type = typeInfo(label, mergedFilters, {
+    confidence: existing.confidence === "unknown" ? "call context" : "merged",
+    source
+  });
 }
 
 function parseLocalDeclarations(body, bodyOffset, lineStarts, scope) {
@@ -457,6 +539,51 @@ function parseCallExpression(expr) {
     name: match[1],
     args: splitTopLevel(match[2], ",")
   };
+}
+
+function findCalls(text, masked, baseOffset = 0) {
+  const calls = [];
+  const regex = /\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+  let match;
+
+  while ((match = regex.exec(masked)) !== null) {
+    const name = match[1];
+    if (["function", "if", "for", "while", "repeat", "return"].includes(name)) {
+      continue;
+    }
+
+    const openIndex = match.index + match[0].lastIndexOf("(");
+    const closeIndex = findMatchingParen(masked, openIndex);
+    if (closeIndex < 0) {
+      continue;
+    }
+
+    calls.push({
+      name,
+      start: baseOffset + match.index,
+      end: baseOffset + closeIndex + 1,
+      args: splitCommaList(text.slice(openIndex + 1, closeIndex))
+    });
+  }
+
+  return calls;
+}
+
+function findMatchingParen(masked, openIndex) {
+  let depth = 0;
+  for (let index = openIndex; index < masked.length; index += 1) {
+    const char = masked[index];
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
 }
 
 function signatureParameters(signature) {

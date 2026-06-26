@@ -13,6 +13,8 @@ Current static inference covers:
 
 - global and local assignment symbols
 - function parameters and `local` declarations
+- parameter filter hints from declared call arguments inside function bodies
+- call-site filter merging for user-defined function parameters
 - function return expressions
 - literals: integers, rationals, booleans, strings, lists, records, permutations
 - common GAP constructors and operations such as `SymmetricGroup`,
@@ -29,6 +31,6 @@ Run the stdio server with:
 node server/lsp-server.js
 ```
 
-The VS Code extension currently calls the analyzer directly for hover
-inference. The stdio server is present so a future `vscode-languageclient`
-integration can delegate to the same independent engine.
+The VS Code extension uses `src/lspClient.js` to request inference hovers from
+this stdio server. Manual reference text is still rendered in the extension so
+local documentation links can use VS Code commands.

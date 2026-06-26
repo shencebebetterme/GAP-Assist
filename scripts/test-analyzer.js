@@ -20,6 +20,14 @@ f := function(n)
     values := List([1 .. n], i -> Factorial(i));
     return values;
 end;
+
+uses := function(obj)
+    local gens;
+    gens := GeneratorsOfGroup(obj);
+    return Size(gens);
+end;
+
+callResult := uses(SymmetricGroup(5));
 `;
 
 const analysis = analyzer.analyze(sample, "memory://sample.g");
@@ -43,6 +51,16 @@ const f = globalScope.symbols.get("f");
 assert(f, "f should be a global function symbol");
 assert(f.type.filters.includes("IsFunction"), "f should satisfy IsFunction");
 assert(f.returnType.filters.includes("IsList"), "f should return a list");
+
+const uses = globalScope.symbols.get("uses");
+assert(uses, "uses should be a global function symbol");
+assert(uses.parameters[0].type.filters.includes("IsMagmaWithInverses"), "uses parameter should infer filters from GeneratorsOfGroup");
+assert(uses.parameters[0].type.filters.includes("IsPermGroup"), "uses parameter should merge filters from call-site arguments");
+assert(uses.returnType.filters.includes("IsInt"), "uses should infer Size return as integer-like");
+assert(uses.type.parameterTypes[0].filters.includes("IsMagmaWithInverses"), "uses function type should expose parameter filters");
+
+const callResult = globalScope.symbols.get("callResult");
+assert(callResult && callResult.type.filters.includes("IsInt"), "callResult should use the inferred return type of uses");
 
 const hoverG = analyzer.hoverAt(sample, 1, 1);
 assert(hoverG && hoverG.symbol.name === "G", "hover at G should resolve global symbol");

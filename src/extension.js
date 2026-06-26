@@ -5,11 +5,13 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 const vscode = require("vscode");
 const { getEntries, isIdentifier, loadDeclarations, loadDocumentation } = require("./docs");
+const { GapLanguageServerClient } = require("./lspClient");
 const { GapAnalyzer, formatInferenceMarkdown } = require("../server/analyzer");
 
 const GAP_SELECTOR = { language: "gap" };
 const IDENTIFIER_PATTERN = /[A-Za-z_][A-Za-z0-9_]*/;
 const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend(["function"], []);
+let activeLanguageServerClient;
 
 function activate(context) {
   let docs;
@@ -23,9 +25,14 @@ function activate(context) {
   }
 
   const analyzer = new GapAnalyzer(docs, declarations);
+  const languageServerClient = new GapLanguageServerClient(path.join(context.extensionPath, "server", "lsp-server.js"), {
+    cwd: context.extensionPath
+  });
+  activeLanguageServerClient = languageServerClient;
 
   context.subscriptions.push(
-    vscode.languages.registerHoverProvider(GAP_SELECTOR, new GapHoverProvider(docs, analyzer)),
+    { dispose: () => languageServerClient.dispose() },
+    vscode.languages.registerHoverProvider(GAP_SELECTOR, new GapHoverProvider(docs, analyzer, languageServerClient)),
     vscode.languages.registerDocumentSemanticTokensProvider(
       GAP_SELECTOR,
       new GapSemanticTokensProvider(docs),
@@ -35,16 +42,19 @@ function activate(context) {
   );
 }
 
-function deactivate() {}
+function deactivate() {
+  return activeLanguageServerClient ? activeLanguageServerClient.dispose() : undefined;
+}
 
 class GapHoverProvider {
-  constructor(docs, analyzer) {
+  constructor(docs, analyzer, languageServerClient) {
     this.docs = docs;
     this.analyzer = analyzer;
+    this.languageServerClient = languageServerClient;
     this.analysisCache = new Map();
   }
 
-  provideHover(document, position) {
+  async provideHover(document, position) {
     const range = document.getWordRangeAtPosition(position, IDENTIFIER_PATTERN);
     if (!range) {
       return undefined;
@@ -52,8 +62,8 @@ class GapHoverProvider {
 
     const name = document.getText(range);
     const entries = getEntries(this.docs, name);
-    const inferenceHover = this.inferenceHover(document, position);
-    if ((!entries || entries.length === 0) && !inferenceHover) {
+    const inferenceMarkdown = await this.inferenceMarkdown(document, position);
+    if ((!entries || entries.length === 0) && !inferenceMarkdown) {
       return undefined;
     }
 
@@ -71,8 +81,8 @@ class GapHoverProvider {
       enabledCommands: ["gapReference.openLocalManual"]
     };
 
-    if (inferenceHover) {
-      markdown.appendMarkdown(formatInferenceMarkdown(inferenceHover));
+    if (inferenceMarkdown) {
+      markdown.appendMarkdown(inferenceMarkdown);
       if (shownEntryGroups.length > 0) {
         markdown.appendMarkdown("\n\n---\n\n");
       }
@@ -119,6 +129,16 @@ class GapHoverProvider {
     }
 
     return new vscode.Hover(markdown, range);
+  }
+
+  async inferenceMarkdown(document, position) {
+    try {
+      const hover = await this.languageServerClient.hover(document, position);
+      return hover && hover.contents && hover.contents.value;
+    } catch (_) {
+      const fallbackHover = this.inferenceHover(document, position);
+      return fallbackHover ? formatInferenceMarkdown(fallbackHover) : "";
+    }
   }
 
   inferenceHover(document, position) {
