@@ -26,9 +26,11 @@ function activate(context) {
 
   const analyzer = new GapAnalyzer(docs, declarations);
   const languageServerClient = new GapLanguageServerClient(path.join(context.extensionPath, "server", "lsp-server.js"), {
-    cwd: context.extensionPath
+    cwd: context.extensionPath,
+    timeoutMs: 1000
   });
   activeLanguageServerClient = languageServerClient;
+  languageServerClient.ensureStarted().catch(() => {});
 
   context.subscriptions.push(
     { dispose: () => languageServerClient.dispose() },
@@ -132,12 +134,18 @@ class GapHoverProvider {
   }
 
   async inferenceMarkdown(document, position) {
+    const fallbackHover = this.inferenceHover(document, position);
+    const fallbackMarkdown = fallbackHover ? formatInferenceMarkdown(fallbackHover) : "";
+
+    if (fallbackHover && fallbackHover.kind === "symbol") {
+      return fallbackMarkdown;
+    }
+
     try {
       const hover = await this.languageServerClient.hover(document, position);
-      return hover && hover.contents && hover.contents.value;
+      return (hover && hover.contents && hover.contents.value) || fallbackMarkdown;
     } catch (_) {
-      const fallbackHover = this.inferenceHover(document, position);
-      return fallbackHover ? formatInferenceMarkdown(fallbackHover) : "";
+      return fallbackMarkdown;
     }
   }
 

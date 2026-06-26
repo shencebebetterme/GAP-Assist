@@ -43,6 +43,10 @@ class GapLanguageServerClient {
 
     this.process = childProcess.spawn(process.execPath, [this.serverPath], {
       cwd: this.cwd,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1"
+      },
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true
     });

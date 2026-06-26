@@ -27,6 +27,12 @@ async function main() {
   try {
     let text = [
       "G := SymmetricGroup(4);",
+      "gens := GeneratorsOfGroup(G);",
+      "f := function(n)",
+      "    local values;",
+      "    values := List([1 .. n], i -> Factorial(i));",
+      "    return values;",
+      "end;",
       "uses := function(obj)",
       "    return Size(obj);",
       "end;",
@@ -37,11 +43,19 @@ async function main() {
     const document = createDocument("memory://client-test.g", "gap", 1, () => text);
     const groupHover = await client.hover(document, { line: 0, character: 1 });
     assert(groupHover.contents.value.includes("IsPermGroup"), "client hover should return server inference for variables");
+    assert(!groupHover.contents.value.includes("Source:"), "client hover should not include internal source lines");
 
-    const functionHover = await client.hover(document, { line: 1, character: 1 });
+    const gensHover = await client.hover(document, { line: 1, character: 1 });
+    assert(gensHover.contents.value.includes("IsList"), "client hover should return server inference for globals");
+
+    const localHover = await client.hover(document, { line: 4, character: 6 });
+    assert(localHover.contents.value.includes("IsList"), "client hover should return server inference for local variables");
+
+    const functionHover = await client.hover(document, { line: 7, character: 1 });
     assert(functionHover.contents.value.includes("Input filters"), "client hover should return function input filters");
     assert(functionHover.contents.value.includes("IsListOrCollection"), "client hover should include body-derived filters");
     assert(functionHover.contents.value.includes("IsPermGroup"), "client hover should include call-site filters");
+    assert(!functionHover.contents.value.includes("Confidence:"), "client hover should not include confidence lines");
 
     text = text.replace("SymmetricGroup(4)", "[1, 2, 3]");
     document.version = 2;

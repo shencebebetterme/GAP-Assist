@@ -663,10 +663,8 @@ function formatInferenceMarkdown(hover) {
   const type = symbol.returnType ? symbol.type : symbol.type;
   const lines = ["### Static GAP inference", ""];
 
-  if (symbol.scope && symbol.scope !== "documented global") {
+  if (["global", "local", "parameter"].includes(symbol.scope)) {
     lines.push(`_${escapeMarkdown(symbol.scope)} symbol_`, "");
-  } else if (symbol.scope === "documented global") {
-    lines.push("_documented global symbol_", "");
   }
 
   const displayName = symbol.name || hover.word.text;
@@ -702,7 +700,8 @@ function formatInferenceMarkdown(hover) {
       const filters = parameterType.filters && parameterType.filters.length > 0
         ? parameterType.filters.map((filter) => `\`${filter}\``).join(", ")
         : "`IsObject`";
-      lines.push(`- arg${index + 1}: ${filters}`);
+      const name = type.parameters && type.parameters[index] ? type.parameters[index] : `arg${index + 1}`;
+      lines.push(`- \`${name}\`: ${filters}`);
     });
     lines.push("");
   }
@@ -710,13 +709,6 @@ function formatInferenceMarkdown(hover) {
   if (type && type.declarations && type.declarations.length > 0) {
     const declaration = type.declarations[0];
     lines.push(`Declaration: \`${declaration.callee}\` in \`${declaration.file}:${declaration.line}\``, "");
-  }
-
-  if (symbol.source) {
-    lines.push(`Source: \`${truncate(symbol.source, 90)}\``, "");
-  }
-  if (type && type.documentation) {
-    lines.push(`Documentation return hint: ${escapeMarkdown(truncate(type.documentation, 180))}`, "");
   }
 
   return lines.join("\n");
@@ -730,9 +722,6 @@ function appendTypeDetails(lines, type) {
   if (type.element) {
     lines.push(`Element: \`${formatTypeLabel(type.element)}\``);
     appendFilterLine(lines, type.element.filters, "Element filters");
-  }
-  if (type.confidence) {
-    lines.push(`Confidence: ${escapeMarkdown(type.confidence)}`, "");
   }
 }
 
@@ -958,10 +947,6 @@ function markdownToPlainText(markdown) {
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/_([^_]+)_/g, "$1")
     .trim();
-}
-
-function truncate(text, length) {
-  return text && text.length > length ? `${text.slice(0, length - 3)}...` : text;
 }
 
 function escapeMarkdown(text) {

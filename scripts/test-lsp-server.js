@@ -120,6 +120,8 @@ async function main() {
   const hover = await waitForResponse(2);
   assert(hover.result.contents.value.includes("Static GAP inference"), "hover should include static inference");
   assert(hover.result.contents.value.includes("IsPermGroup"), "hover should include inferred GAP filters");
+  assert(!hover.result.contents.value.includes("Source:"), "hover should not include internal source lines");
+  assert(!hover.result.contents.value.includes("Confidence:"), "hover should not include confidence lines");
 
   send({
     id: 4,
@@ -157,6 +159,7 @@ async function main() {
   assert(functionHover.result.contents.value.includes("Input filters"), "function hover should include inferred input filters");
   assert(functionHover.result.contents.value.includes("IsListOrCollection"), "function hover should include body-derived parameter filters");
   assert(functionHover.result.contents.value.includes("IsPermGroup"), "function hover should include call-site parameter filters");
+  assert(!functionHover.result.contents.value.includes("Source:"), "function hover should not include internal source lines");
 
   send({ id: 3, method: "shutdown", params: null });
   await waitForResponse(3);
