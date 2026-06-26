@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.9
+
+- Added `repeat ... until` fallthrough filter flow from positive until predicates.
+- Used repeat-until flow for hovers, diagnostics, returns, and post-loop call checks.
+
 ## 0.3.8
 
 - Treated `ErrorNoReturn(...)` and `TryNextMethod()` as terminating statements for negative guard fallthrough flow.

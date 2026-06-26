@@ -139,6 +139,12 @@ function analyzeStatements(statements, scope, data, functions, text, masked, lin
       continue;
     }
 
+    if (statement.type === "repeatStatement") {
+      analyzeRepeatStatementNode(statement, activeScope, data, functions, text, masked, lineStarts, scopes);
+      activeScope = repeatFallthroughScope(statement, data, lineStarts, scopes) || activeScope;
+      continue;
+    }
+
     for (const nestedStatements of nestedStatementLists(statement)) {
       analyzeStatements(nestedStatements, activeScope, data, functions, text, masked, lineStarts, scopes);
     }
@@ -342,6 +348,38 @@ function analyzeWhileStatementNode(statement, parentScope, data, functions, text
   scopes.push(scope);
   applyPredicateRefinements(statement.condition && statement.condition.text, scope, data, statement.condition && statement.condition.start);
   analyzeStatements(statement.body || [], scope, data, functions, text, masked, lineStarts, scopes);
+}
+
+function analyzeRepeatStatementNode(statement, parentScope, data, functions, text, masked, lineStarts, scopes) {
+  const scope = createPredicateLoopScope("repeat loop", statement, parentScope, lineStarts);
+  statement.scope = scope;
+  scopes.push(scope);
+  analyzeStatements(statement.body || [], scope, data, functions, text, masked, lineStarts, scopes);
+
+  if (statement.condition && statement.condition.text) {
+    inferExpression(statement.condition.text, scope, data, statement.condition.start);
+  }
+}
+
+function repeatFallthroughScope(statement, data, lineStarts, scopes) {
+  const refinements = predicateRefinements(statement.condition && statement.condition.text, data);
+  if (refinements.length === 0) {
+    return undefined;
+  }
+
+  const parentScope = statement.scope || statement.analysisScope;
+  if (!parentScope) {
+    return undefined;
+  }
+
+  const enclosingEnd = parentScope.parent ? parentScope.parent.end : parentScope.end;
+  const scope = createScope("repeat fallthrough", statement.end, enclosingEnd, parentScope);
+  scope.lineStarts = lineStarts;
+  scope.condition = statement.condition && statement.condition.text;
+  applyRefinementsToScope(refinements, scope, statement.condition ? statement.condition.start : statement.end);
+  statement.fallthroughScope = scope;
+  scopes.push(scope);
+  return scope;
 }
 
 function createLoopScope(statement, parentScope, lineStarts) {
@@ -654,6 +692,11 @@ function inferReturnTypeFromStatements(statements, scope, data) {
         inferred = nested;
       }
     } else if (statement.type === "whileStatement") {
+      const nested = inferReturnTypeFromStatements(statement.body || [], statement.scope || statementScope, data);
+      if (nested.label !== "no return value") {
+        inferred = nested;
+      }
+    } else if (statement.type === "repeatStatement") {
       const nested = inferReturnTypeFromStatements(statement.body || [], statement.scope || statementScope, data);
       if (nested.label !== "no return value") {
         inferred = nested;

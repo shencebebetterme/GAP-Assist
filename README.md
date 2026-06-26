@@ -47,6 +47,8 @@ Terminating negative guards refine the following code path. After `if not IsStri
 
 The same fallthrough narrowing is applied for strong terminating guard calls such as `ErrorNoReturn(...)` and `TryNextMethod()`. Plain `Error(...)` is not currently treated as non-returning because GAP's break loop can be recoverable.
 
+`repeat ... until` loops refine the following path from positive until predicates. After `repeat ... until IsGroup(obj);`, later statements treat `obj` as group-like.
+
 Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
 
 ## Regenerate Documentation Data

@@ -328,4 +328,36 @@ const methodGuardHover = terminatingGuardAnalysis.hoverAt(12, 31);
 assert(methodGuardHover && methodGuardHover.symbol.name === "obj", "hover after TryNextMethod guard should resolve the guarded parameter");
 assert(methodGuardHover.symbol.type.filters.includes("IsGroup"), "TryNextMethod guard hover should include fallthrough predicate filters");
 
+const repeatUntilSample = [
+  "repeatFlow := function(obj)",
+  "    repeat",
+  "        marker := 1;",
+  "    until IsString(obj);",
+  "    bad := obj + 1;",
+  "    return obj;",
+  "end;",
+  "",
+  "repeatGroup := function(obj)",
+  "    repeat",
+  "        marker := 1;",
+  "    until IsGroup(obj);",
+  "    return GeneratorsOfGroup(obj);",
+  "end;",
+  ""
+].join("\n");
+const repeatUntilAnalysis = analyzer.analyze(repeatUntilSample, "memory://repeat-until.g");
+const repeatDiagnostics = repeatUntilAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "operator-type");
+assert.strictEqual(repeatDiagnostics.length, 1, "repeat-until fallthrough should diagnose invalid post-loop arithmetic");
+assert(repeatDiagnostics[0].message.includes("left operand is string"), "repeat-until diagnostic should use condition-refined filters");
+assert.strictEqual(repeatDiagnostics[0].range.start.line, 4, "repeat-until diagnostic should point after the loop");
+const repeatHover = repeatUntilAnalysis.hoverAt(4, 12);
+assert(repeatHover && repeatHover.symbol.name === "obj", "hover after repeat-until should resolve the refined symbol");
+assert(repeatHover.symbol.type.filters.includes("IsString"), "hover after repeat-until should include condition filters");
+const repeatFlow = repeatUntilAnalysis.scopes[0].symbols.get("repeatFlow");
+assert(repeatFlow && repeatFlow.returnType.filters.includes("IsString"), "return after repeat-until should use condition flow");
+const repeatGroup = repeatUntilAnalysis.scopes[0].symbols.get("repeatGroup");
+assert(repeatGroup && repeatGroup.returnType.filters.includes("IsList"), "group repeat-until flow should allow group-only calls after the loop");
+const repeatCallDiagnostics = repeatUntilAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "call-argument-filter");
+assert.strictEqual(repeatCallDiagnostics.length, 0, "repeat-until group flow should prevent incompatible call diagnostics after the loop");
+
 console.log("Analyzer tests passed.");
