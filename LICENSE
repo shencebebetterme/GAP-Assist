@@ -1,0 +1,9 @@
+SPDX-License-Identifier: GPL-2.0-or-later
+
+This extension is prepared as a local GAP documentation helper. It includes
+generated snippets from the GAP reference manual installed on this machine.
+Those documentation-derived files should be treated under the applicable GAP
+distribution documentation license terms.
+
+The extension source files in this workspace may be used under the GNU General
+Public License, version 2 or later.

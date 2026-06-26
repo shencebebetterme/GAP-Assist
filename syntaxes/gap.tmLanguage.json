@@ -1,0 +1,142 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "GAP",
+  "scopeName": "source.gap",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#characters"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#function-calls"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.gap",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.gap",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gap",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "characters": {
+      "patterns": [
+        {
+          "name": "constant.character.gap",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gap",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.gap",
+          "match": "\\b(?:0[xX][0-9A-Fa-f]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.gap",
+          "match": "\\b(?:atomic|break|continue|do|elif|else|end|fi|for|function|if|local|od|readonly|readwrite|rec|repeat|return|then|try|catch|until|while)\\b"
+        },
+        {
+          "name": "keyword.operator.word.gap",
+          "match": "\\b(?:and|in|mod|not|or)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.gap",
+          "match": "\\b(?:fail|false|infinity|last|last2|last3|true)\\b|-infinity\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "support.function.declaration.gap",
+          "match": "\\b(?:BindGlobal|DeclareAttribute|DeclareCategory|DeclareConstructor|DeclareFilter|DeclareGlobalFunction|DeclareGlobalName|DeclareGlobalVariable|DeclareOperation|DeclareProperty|DeclareRepresentation|DeclareSynonym|DeclareSynonymAttr|InstallGlobalFunction|InstallImmediateMethod|InstallMethod|InstallOtherMethod|InstallTrueMethod|InstallValue|NewAttribute|NewCategory|NewConstructor|NewFilter|NewOperation|NewProperty|NewRepresentation)\\b"
+        }
+      ]
+    },
+    "function-calls": {
+      "patterns": [
+        {
+          "name": "entity.name.function.gap",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.gap",
+          "match": ":="
+        },
+        {
+          "name": "keyword.operator.arrow.gap",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.comparison.gap",
+          "match": "<=|>=|<>|=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.gap",
+          "match": "\\+|-|\\*|/|\\^"
+        },
+        {
+          "name": "keyword.operator.list.gap",
+          "match": "\\.\\.?"
+        }
+      ]
+    }
+  }
+}

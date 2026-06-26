@@ -1,0 +1,107 @@
+{
+  "name": "gap-reference-assistant",
+  "displayName": "GAP Reference Assistant",
+  "description": "Syntax highlighting, documented symbol highlighting, and hover reference text for GAP.",
+  "version": "0.1.0",
+  "publisher": "local-gap",
+  "license": "GPL-2.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shencebebetterme/GAP_frontend.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "gap",
+    "group theory",
+    "algebra",
+    "syntax highlighting",
+    "hover"
+  ],
+  "activationEvents": [
+    "onLanguage:gap",
+    "onCommand:gapReference.openLocalManual"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gap",
+        "aliases": [
+          "GAP",
+          "gap"
+        ],
+        "extensions": [
+          ".g",
+          ".gap",
+          ".gd",
+          ".gi",
+          ".tst"
+        ],
+        "filenames": [
+          "init.g",
+          "read.g"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gap",
+        "scopeName": "source.gap",
+        "path": "./syntaxes/gap.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "gapReference.openLocalManual",
+        "title": "GAP: Open Local Reference Page"
+      }
+    ],
+    "configuration": {
+      "title": "GAP Reference Assistant",
+      "properties": {
+        "gapReference.manualPath": {
+          "type": "string",
+          "default": "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1\\doc\\ref",
+          "description": "Absolute path to the GAP reference manual HTML directory. This is used by hover links."
+        },
+        "gapReference.hover.maxEntries": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of overload/reference entries to show in one hover."
+        },
+        "gapReference.hover.maxDescriptionLength": {
+          "type": "number",
+          "default": 900,
+          "minimum": 160,
+          "maximum": 4000,
+          "description": "Maximum description length per hover entry before truncation."
+        },
+        "gapReference.hover.wrapColumn": {
+          "type": "number",
+          "default": 86,
+          "minimum": 40,
+          "maximum": 140,
+          "description": "Column at which hover signatures and documentation paragraphs are hard-wrapped."
+        },
+        "gapReference.semanticHighlighting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight documented GAP reference symbols using VS Code semantic tokens."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "extract-docs": "node scripts/extract-gap-docs.js",
+    "validate": "node scripts/validate-extension.js",
+    "vscode:prepublish": "npm run validate"
+  }
+}
