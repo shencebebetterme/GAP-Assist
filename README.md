@@ -45,6 +45,8 @@ Loop conditions can refine symbols too. Inside `while IsString(obj) do`, the ana
 
 Terminating negative guards refine the following code path. After `if not IsString(obj) then return fail; fi;`, later statements in the same block treat `obj` as satisfying `IsString`.
 
+The same fallthrough narrowing is applied for strong terminating guard calls such as `ErrorNoReturn(...)` and `TryNextMethod()`. Plain `Error(...)` is not currently treated as non-returning because GAP's break loop can be recoverable.
+
 Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
 
 ## Regenerate Documentation Data

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8
+
+- Treated `ErrorNoReturn(...)` and `TryNextMethod()` as terminating statements for negative guard fallthrough flow.
+- Used those guard exits for post-guard hovers, diagnostics, return inference, and call checks.
+
 ## 0.3.7
 
 - Added fallthrough filter flow for terminating negative guard clauses such as `if not IsString(obj) then return fail; fi;`.

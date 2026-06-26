@@ -294,4 +294,38 @@ assert(guardHover.symbol.type.filters.includes("IsString"), "hover after a guard
 const guardFlow = guardFlowAnalysis.scopes[0].symbols.get("guardFlow");
 assert(guardFlow && guardFlow.returnType.filters.includes("IsString"), "return after a guard should use fallthrough flow");
 
+const terminatingGuardSample = [
+  "hardGuard := function(obj)",
+  "    if not IsString(obj) then",
+  "        ErrorNoReturn(\"expected string\");",
+  "    fi;",
+  "    bad := obj + 1;",
+  "    return obj;",
+  "end;",
+  "",
+  "methodGuard := function(obj)",
+  "    if not IsGroup(obj) then",
+  "        TryNextMethod();",
+  "    fi;",
+  "    return GeneratorsOfGroup(obj);",
+  "end;",
+  ""
+].join("\n");
+const terminatingGuardAnalysis = analyzer.analyze(terminatingGuardSample, "memory://terminating-guards.g");
+const terminatingGuardOperatorDiagnostics = terminatingGuardAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "operator-type");
+assert.strictEqual(terminatingGuardOperatorDiagnostics.length, 1, "ErrorNoReturn guard should refine the fallthrough path");
+assert(
+  terminatingGuardOperatorDiagnostics[0].message.includes("left operand is string"),
+  "ErrorNoReturn guard diagnostic should use the fallthrough predicate filters"
+);
+const hardGuard = terminatingGuardAnalysis.scopes[0].symbols.get("hardGuard");
+assert(hardGuard && hardGuard.returnType.filters.includes("IsString"), "ErrorNoReturn guard return should use fallthrough flow");
+const methodGuard = terminatingGuardAnalysis.scopes[0].symbols.get("methodGuard");
+assert(methodGuard && methodGuard.returnType.filters.includes("IsList"), "TryNextMethod guard should allow group-only code after the guard");
+const terminatingCallDiagnostics = terminatingGuardAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "call-argument-filter");
+assert.strictEqual(terminatingCallDiagnostics.length, 0, "TryNextMethod guard should prevent incompatible call diagnostics after the guard");
+const methodGuardHover = terminatingGuardAnalysis.hoverAt(12, 31);
+assert(methodGuardHover && methodGuardHover.symbol.name === "obj", "hover after TryNextMethod guard should resolve the guarded parameter");
+assert(methodGuardHover.symbol.type.filters.includes("IsGroup"), "TryNextMethod guard hover should include fallthrough predicate filters");
+
 console.log("Analyzer tests passed.");

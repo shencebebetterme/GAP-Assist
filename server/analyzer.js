@@ -3,6 +3,7 @@
 const { parseGapSource } = require("./parser");
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const TERMINATING_CALLS = new Set(["ErrorNoReturn", "TryNextMethod"]);
 
 const HARD_CODED_CALLS = {
   AlternatingGroup: callType("alternating permutation group", ["IsObject", "IsCollection", "IsMagma", "IsGroup", "IsPermGroup", "IsFinite"], "constructor"),
@@ -300,6 +301,9 @@ function statementTerminates(statement) {
   if (statement.type === "returnStatement") {
     return true;
   }
+  if (statement.type === "expressionStatement") {
+    return isTerminatingExpression(statement.expression && statement.expression.text);
+  }
   if (statement.type === "ifStatement") {
     return Boolean(
       statement.elseBody &&
@@ -309,6 +313,11 @@ function statementTerminates(statement) {
     );
   }
   return false;
+}
+
+function isTerminatingExpression(expressionText) {
+  const call = parseCallExpression((expressionText || "").trim());
+  return Boolean(call && TERMINATING_CALLS.has(call.name));
 }
 
 function analyzeForStatementNode(statement, parentScope, data, functions, text, masked, lineStarts, scopes) {
