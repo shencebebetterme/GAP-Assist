@@ -64,6 +64,7 @@ function main() {
     "server/lsp-server.js",
     "src/lspClient.js",
     "scripts/test-analyzer.js",
+    "scripts/test-extension-helpers.js",
     "scripts/test-lsp-server.js",
     "scripts/test-lsp-client.js"
   ]) {

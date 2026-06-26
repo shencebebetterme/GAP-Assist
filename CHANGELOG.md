@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed hovers for inferred global variables, local variables, and user-defined functions that do not have manual documentation entries.
+- Kept system-function inference hovers cleaner by hiding internal source, confidence, and documentation-return-hint lines.
+
 ## 0.2.0
 
 - Added a standalone GAP analyzer and stdio language server prototype.

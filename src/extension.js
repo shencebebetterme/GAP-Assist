@@ -63,9 +63,9 @@ class GapHoverProvider {
     }
 
     const name = document.getText(range);
-    const entries = getEntries(this.docs, name);
+    const entries = getEntries(this.docs, name) || [];
     const inferenceMarkdown = await this.inferenceMarkdown(document, position);
-    if ((!entries || entries.length === 0) && !inferenceMarkdown) {
+    if (entries.length === 0 && !inferenceMarkdown) {
       return undefined;
     }
 
@@ -256,7 +256,7 @@ function manualCommandUri(entry) {
   return `command:gapReference.openLocalManual?${payload}`;
 }
 
-function groupEntries(entries) {
+function groupEntries(entries = []) {
   const groupsByKey = new Map();
 
   for (const entry of entries) {
@@ -498,6 +498,9 @@ function truncate(text, maxLength) {
 }
 
 module.exports = {
+  __test: {
+    groupEntries
+  },
   activate,
   deactivate
 };
