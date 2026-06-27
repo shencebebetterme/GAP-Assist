@@ -8,7 +8,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const adapterPath = path.join(root, "debug", "gapDebugAdapter.js");
-const { parseHitLine, parseVariableLine, unescapeField } = require("../debug/gapDebugAdapter");
+const { parseHitLine, parseVariableLine, runtimeVariableValue, unescapeField } = require("../debug/gapDebugAdapter");
 
 if (!hasWslGap()) {
   console.log("Debug adapter smoke test skipped because wsl gap is unavailable.");
@@ -29,6 +29,14 @@ assert.strictEqual(
   parseVariableLine("__GAPDEBUG_VAR__\ttext\ttrue\tline\\nnext").value,
   "line\nnext",
   "escaped runtime values should still decode control escapes"
+);
+assert.strictEqual(
+  runtimeVariableValue({
+    bound: true,
+    value: 'function ( obj ) __GAPDEBUG_Probe( 1, "file", 1, 1, "f", 1, [  ], [  ] ); return obj; end'
+  }),
+  "function (obj) ... end",
+  "instrumented GAP functions should be compacted before display"
 );
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-adapter-test-"));
@@ -190,6 +198,9 @@ async function main() {
   const x = variables.body.variables.find((variable) => variable.name === "x");
   assert(x, "captured globals should include x");
   assert.strictEqual(x.value, "1", "x should have its runtime value before the function call executes");
+  const f = variables.body.variables.find((variable) => variable.name === "f");
+  assert(f, "captured globals should include f");
+  assert.strictEqual(f.value, "function (n) ... end", "function variables should not expose inserted debug probe code");
   const initialLocalsSeq = send("variables", {
     variablesReference: localsReference
   });
@@ -203,6 +214,24 @@ async function main() {
   });
   const evaluate = await waitForResponse("evaluate", evaluateSeq);
   assert.strictEqual(evaluate.body.result, "1", "hover evaluation should return captured variable values");
+
+  const functionHoverSeq = send("evaluate", {
+    expression: "f",
+    context: "hover",
+    frameId: 1
+  });
+  const functionHover = await waitForResponse("evaluate", functionHoverSeq);
+  assert.strictEqual(functionHover.success, false, "hover evaluation should not override static hovers for GAP functions");
+  assert(!JSON.stringify(functionHover).includes("__GAPDEBUG_Probe"), "function hover response should not include inserted probe code");
+
+  const systemFunctionHoverSeq = send("evaluate", {
+    expression: "SymmetricGroup",
+    context: "hover",
+    frameId: 1
+  });
+  const systemFunctionHover = await waitForResponse("evaluate", systemFunctionHoverSeq);
+  assert.strictEqual(systemFunctionHover.success, false, "hover evaluation should not show fallback text for uncaptured GAP symbols");
+  assert(!JSON.stringify(systemFunctionHover).includes("Only simple captured"), "hover evaluation should not return the fallback text as a hover value");
 
   const stepEventStart = messages.length;
   const nextSeq = send("next", {

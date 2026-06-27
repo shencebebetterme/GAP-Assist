@@ -452,7 +452,7 @@ class GapDebugAdapter {
       .filter((variable) => variable.scope === scope)
       .map((variable) => ({
         name: variable.name,
-        value: variable.bound ? variable.value : "<unbound>",
+        value: runtimeVariableValue(variable),
         type: variable.bound ? "GAP value" : "unbound",
         variablesReference: 0
       }));
@@ -461,12 +461,22 @@ class GapDebugAdapter {
 
   evaluate(request) {
     const expression = String((request.arguments && request.arguments.expression) || "").trim();
+    const context = request.arguments && request.arguments.context;
     const variable = this.currentVariables.get(expression);
     if (variable) {
+      if (context === "hover" && isFunctionValue(variable.value)) {
+        this.sendResponse(request, undefined, false, "Runtime hover is not available for GAP functions.");
+        return;
+      }
       this.sendResponse(request, {
-        result: variable.bound ? variable.value : "<unbound>",
+        result: runtimeVariableValue(variable),
         variablesReference: 0
       });
+      return;
+    }
+
+    if (context === "hover") {
+      this.sendResponse(request, undefined, false, "Expression is not a captured GAP variable.");
       return;
     }
 
@@ -652,6 +662,27 @@ function nearestProbeForLine(probes, line) {
   return (probes || []).find((probe) => probe.line >= line);
 }
 
+function runtimeVariableValue(variable) {
+  if (!variable || !variable.bound) {
+    return "<unbound>";
+  }
+  if (isFunctionValue(variable.value)) {
+    return compactFunctionValue(variable.value);
+  }
+  return variable.value;
+}
+
+function isFunctionValue(value) {
+  return /^function\s*\(/.test(String(value || "").trim());
+}
+
+function compactFunctionValue(value) {
+  const text = String(value || "").trim();
+  const signatureMatch = /^function\s*\(([^)]*)\)/.exec(text);
+  const signature = signatureMatch ? `function (${signatureMatch[1].trim()})` : "function";
+  return `${signature} ... end`;
+}
+
 function defaultGapCommand() {
   return process.platform === "win32" ? "wsl" : "gap";
 }
@@ -693,5 +724,6 @@ module.exports = {
   GapDebugAdapter,
   parseHitLine,
   parseVariableLine,
+  runtimeVariableValue,
   unescapeField
 };

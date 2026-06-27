@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.32
+
+- Kept debug hover from overriding static GAP hovers for functions and uncaptured GAP symbols.
+- Compacted instrumented GAP function values in the debugger variable panel.
+
 ## 0.3.31
 
 - Split GAP debugger variables into separate `Locals` and `Globals` scopes.
