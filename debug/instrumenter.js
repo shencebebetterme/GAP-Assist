@@ -37,7 +37,7 @@ function walkStatements(statements, scope, probes, sourcePath, lineStarts) {
   for (const statement of statements || []) {
     if (statement.type === "localDeclaration") {
       for (const name of statement.names || []) {
-        addVisibleName(scope, name.name);
+        addVisibleName(scope, name.name, "local");
       }
       addProbe(statement, scope, probes, sourcePath, lineStarts, {
         offset: statement.end,
@@ -49,17 +49,17 @@ function walkStatements(statements, scope, probes, sourcePath, lineStarts) {
     addProbe(statement, scope, probes, sourcePath, lineStarts);
 
     if (statement.type === "assignment") {
-      addVisibleName(scope, statement.name);
+      addAssignedName(scope, statement.name);
       continue;
     }
 
     if (statement.type === "functionAssignment") {
-      const bodyScope = createInstrumentationScope(statement.name, scope.depth + 1, [
-        ...scope.visible,
-        ...(statement.params || []).map((param) => param.name)
-      ]);
+      const bodyScope = createInstrumentationScope(statement.name, scope.depth + 1, scope.visible);
+      for (const param of statement.params || []) {
+        addVisibleName(bodyScope, param.name, "local");
+      }
       walkStatements(statement.body || [], bodyScope, probes, sourcePath, lineStarts);
-      addVisibleName(scope, statement.name);
+      addAssignedName(scope, statement.name);
       continue;
     }
 
@@ -82,7 +82,7 @@ function walkStatements(statements, scope, probes, sourcePath, lineStarts) {
     if (statement.type === "forStatement") {
       const loopScope = scope.clone();
       const variable = statement.variable && statement.variable.text;
-      addVisibleName(loopScope, variable);
+      addVisibleName(loopScope, variable, "local");
       walkStatements(statement.body || [], loopScope, probes, sourcePath, lineStarts);
       mergeVisibleNames(scope, [loopScope]);
       continue;
@@ -109,48 +109,68 @@ function addProbe(statement, scope, probes, sourcePath, lineStarts, options = {}
     column: position.character + 1,
     functionName: scope.functionName,
     depth: scope.depth,
-    variables: sortedVisibleNames(scope.visible)
+    variables: sortedVisibleVariables(scope.visible)
   });
 }
 
-function createInstrumentationScope(functionName, depth, names) {
+function createInstrumentationScope(functionName, depth, variables) {
   const scope = {
     functionName,
     depth,
-    visible: new Set(),
+    visible: new Map(),
     clone() {
       return createInstrumentationScope(this.functionName, this.depth, this.visible);
     }
   };
 
-  for (const name of names || []) {
-    addVisibleName(scope, name);
+  if (variables instanceof Map) {
+    for (const [name, kind] of variables) {
+      addVisibleName(scope, name, kind);
+    }
+  } else {
+    for (const entry of variables || []) {
+      if (typeof entry === "string") {
+        addVisibleName(scope, entry, depth === 0 ? "global" : "local");
+      } else if (entry && entry.name) {
+        addVisibleName(scope, entry.name, entry.scope || (depth === 0 ? "global" : "local"));
+      }
+    }
   }
   return scope;
 }
 
-function addVisibleName(scope, name) {
+function addVisibleName(scope, name, kind) {
   if (IDENTIFIER_RE.test(String(name || ""))) {
-    scope.visible.add(name);
+    scope.visible.set(name, kind === "global" ? "global" : "local");
   }
+}
+
+function addAssignedName(scope, name) {
+  if (!IDENTIFIER_RE.test(String(name || ""))) {
+    return;
+  }
+  const existing = scope.visible.get(name);
+  addVisibleName(scope, name, existing || (scope.depth === 0 ? "global" : "local"));
 }
 
 function mergeVisibleNames(targetScope, sourceScopes) {
   for (const sourceScope of sourceScopes || []) {
-    for (const name of sourceScope.visible) {
-      addVisibleName(targetScope, name);
+    for (const [name, kind] of sourceScope.visible) {
+      addVisibleName(targetScope, name, kind);
     }
   }
 }
 
-function sortedVisibleNames(names) {
-  return [...names].sort((left, right) => left.localeCompare(right));
+function sortedVisibleVariables(variables) {
+  return [...variables.entries()]
+    .map(([name, scope]) => ({ name, scope }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function probeCall(probe, options = {}) {
   const variables = probe.variables || [];
-  const names = `[${variables.map(gapString).join(", ")}]`;
-  const captures = `[${variables.map(captureExpression).join(", ")}]`;
+  const names = `[${variables.map((variable) => gapString(variable.name)).join(", ")}]`;
+  const captures = `[${variables.map((variable) => captureExpression(variable.name)).join(", ")}]`;
   return [
     "__GAPDEBUG_Probe(",
     String(probe.id),

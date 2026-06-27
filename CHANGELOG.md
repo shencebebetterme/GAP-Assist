@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.31
+
+- Split GAP debugger variables into separate `Locals` and `Globals` scopes.
+- Classified function parameters, local declarations, and loop variables as locals while preserving top-level bindings as globals.
+
 ## 0.3.30
 
 - Fixed Windows source path decoding in the GAP debugger so paths ending in segments such as `test.g` do not lose `\t` as a tab escape.

@@ -21,23 +21,28 @@ assert.strictEqual(probes.length, 6, "instrumenter should create probes for exec
 
 const topAssignment = probes.find((probe) => probe.line === 1);
 assert(topAssignment, "first assignment should get a probe");
-assert.deepStrictEqual(topAssignment.variables, [], "first top-level probe should not capture future variables");
+assert.deepStrictEqual(variableNames(topAssignment), [], "first top-level probe should not capture future variables");
 
 const functionAssignment = probes.find((probe) => probe.line === 2);
 assert(functionAssignment, "function assignment should get a probe");
-assert.deepStrictEqual(functionAssignment.variables, ["x"], "function assignment should capture prior globals");
+assert.deepStrictEqual(variableNames(functionAssignment), ["x"], "function assignment should capture prior globals");
+assert.strictEqual(variableScope(functionAssignment, "x"), "global", "top-level assignments should be captured as globals");
 
 const localDeclaration = probes.find((probe) => probe.line === 3);
 assert(localDeclaration, "local declaration should get a probe");
-assert.deepStrictEqual(localDeclaration.variables, ["n", "x", "y"], "local declaration probes should capture the newly declared local");
+assert.deepStrictEqual(variableNames(localDeclaration), ["n", "x", "y"], "local declaration probes should capture the newly declared local");
+assert.strictEqual(variableScope(localDeclaration, "n"), "local", "function parameters should be captured as locals");
+assert.strictEqual(variableScope(localDeclaration, "x"), "global", "function bodies should preserve inherited globals");
+assert.strictEqual(variableScope(localDeclaration, "y"), "local", "local declarations should be captured as locals");
 
 const functionAssignmentInside = probes.find((probe) => probe.line === 4);
 assert(functionAssignmentInside, "function body assignment should get a probe");
-assert.deepStrictEqual(functionAssignmentInside.variables, ["n", "x", "y"], "locals should be visible after declaration");
+assert.deepStrictEqual(variableNames(functionAssignmentInside), ["n", "x", "y"], "locals should be visible after declaration");
 
 const callProbe = probes.find((probe) => probe.line === 7);
 assert(callProbe, "post-function call should get a probe");
-assert.deepStrictEqual(callProbe.variables, ["f", "x"], "top-level call should capture earlier assignments");
+assert.deepStrictEqual(variableNames(callProbe), ["f", "x"], "top-level call should capture earlier assignments");
+assert.deepStrictEqual(callProbe.variables.map((variable) => variable.scope), ["global", "global"], "top-level visible variables should be globals");
 
 const instrumented = instrumentGapSource(source, sourcePath).instrumented;
 assert(instrumented.includes("__GAPDEBUG_Probe("), "instrumented source should contain probe calls");
@@ -45,3 +50,12 @@ assert(instrumented.includes("__GAPDEBUG_Capture(IsBound(x), function() return x
 assert(instrumented.endsWith("QUIT;\n"), "instrumented source should quit after running the file");
 
 console.log("Debug instrumenter tests passed.");
+
+function variableNames(probe) {
+  return probe.variables.map((variable) => variable.name);
+}
+
+function variableScope(probe, name) {
+  const variable = probe.variables.find((candidate) => candidate.name === name);
+  return variable && variable.scope;
+}

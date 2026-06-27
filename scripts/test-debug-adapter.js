@@ -128,6 +128,12 @@ function waitForEvent(event, startIndex = 0) {
   return waitFor((message) => message.type === "event" && message.event === event, `${event} event`, 15000, startIndex);
 }
 
+function scopeReference(scopesResponse, name) {
+  const scope = scopesResponse.body.scopes.find((candidate) => candidate.name === name);
+  assert(scope, `scope ${name} should be present`);
+  return scope.variablesReference;
+}
+
 async function main() {
   const initializeSeq = send("initialize", {
     adapterID: "gap",
@@ -169,15 +175,26 @@ async function main() {
     frameId: 1
   });
   const scopes = await waitForResponse("scopes", scopesSeq);
-  assert.strictEqual(scopes.body.scopes.length, 1, "adapter should expose locals scope");
+  assert.deepStrictEqual(
+    scopes.body.scopes.map((scope) => scope.name),
+    ["Locals", "Globals"],
+    "adapter should expose separate local and global scopes"
+  );
+  const localsReference = scopeReference(scopes, "Locals");
+  const globalsReference = scopeReference(scopes, "Globals");
 
   const variablesSeq = send("variables", {
-    variablesReference: scopes.body.scopes[0].variablesReference
+    variablesReference: globalsReference
   });
   const variables = await waitForResponse("variables", variablesSeq);
   const x = variables.body.variables.find((variable) => variable.name === "x");
-  assert(x, "captured variables should include x");
+  assert(x, "captured globals should include x");
   assert.strictEqual(x.value, "1", "x should have its runtime value before the function call executes");
+  const initialLocalsSeq = send("variables", {
+    variablesReference: localsReference
+  });
+  const initialLocals = await waitForResponse("variables", initialLocalsSeq);
+  assert(!initialLocals.body.variables.some((variable) => variable.name === "x"), "top-level globals should not appear in locals");
 
   const evaluateSeq = send("evaluate", {
     expression: "x",
@@ -202,7 +219,7 @@ async function main() {
   assert.strictEqual(steppedStack.body.stackFrames[0].line, 8, "next should step over the function call");
 
   const steppedVariablesSeq = send("variables", {
-    variablesReference: scopes.body.scopes[0].variablesReference
+    variablesReference: globalsReference
   });
   const steppedVariables = await waitForResponse("variables", steppedVariablesSeq);
   const z = steppedVariables.body.variables.find((variable) => variable.name === "z");
@@ -225,12 +242,18 @@ async function main() {
   assert.strictEqual(stepInStack.body.stackFrames[0].name, "f", "stepIn frame should use the GAP function name");
 
   const stepInVariablesSeq = send("variables", {
-    variablesReference: scopes.body.scopes[0].variablesReference
+    variablesReference: localsReference
   });
   const stepInVariables = await waitForResponse("variables", stepInVariablesSeq);
   const n = stepInVariables.body.variables.find((variable) => variable.name === "n");
   assert(n, "captured variables after stepIn should include the function parameter");
   assert.strictEqual(n.value, "3", "stepIn should capture the runtime function argument");
+  assert(!stepInVariables.body.variables.some((variable) => variable.name === "x"), "globals should not appear in function locals");
+  const stepInGlobalsSeq = send("variables", {
+    variablesReference: globalsReference
+  });
+  const stepInGlobals = await waitForResponse("variables", stepInGlobalsSeq);
+  assert(stepInGlobals.body.variables.some((variable) => variable.name === "x"), "function frames should expose inherited globals separately");
 
   const stepOutEventStart = messages.length;
   const stepOutSeq = send("stepOut", {
@@ -247,7 +270,7 @@ async function main() {
   assert.strictEqual(stepOutStack.body.stackFrames[0].line, 9, "stepOut should return to the caller's next statement");
 
   const stepOutVariablesSeq = send("variables", {
-    variablesReference: scopes.body.scopes[0].variablesReference
+    variablesReference: globalsReference
   });
   const stepOutVariables = await waitForResponse("variables", stepOutVariablesSeq);
   const w = stepOutVariables.body.variables.find((variable) => variable.name === "w");

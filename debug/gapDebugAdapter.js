@@ -8,6 +8,7 @@ const { collectProbeMetadata, instrumentGapSource } = require("./instrumenter");
 
 const THREAD_ID = 1;
 const LOCALS_REFERENCE = 1;
+const GLOBALS_REFERENCE = 2;
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 
 class GapDebugAdapter {
@@ -361,7 +362,14 @@ class GapDebugAdapter {
     const shouldStop = Boolean(firstStop || shouldStep || breakpoint || this.pauseRequested);
 
     this.currentProbe = { ...probe, ...hit };
-    this.currentVariables = new Map((hit.variables || []).map((variable) => [variable.name, variable]));
+    const variableScopes = new Map((probe.variables || []).map((variable) => [variable.name, variable.scope || "local"]));
+    this.currentVariables = new Map((hit.variables || []).map((variable) => [
+      variable.name,
+      {
+        ...variable,
+        scope: variableScopes.get(variable.name) || "local"
+      }
+    ]));
 
     if (!shouldStop) {
       this.writeRuntimeCommand("__GAPDEBUG_CONTINUE__");
@@ -422,23 +430,32 @@ class GapDebugAdapter {
           name: "Locals",
           variablesReference: LOCALS_REFERENCE,
           expensive: false
+        },
+        {
+          name: "Globals",
+          variablesReference: GLOBALS_REFERENCE,
+          expensive: false
         }
       ]
     });
   }
 
   variables(request) {
-    if (request.arguments && request.arguments.variablesReference !== LOCALS_REFERENCE) {
+    const reference = request.arguments && request.arguments.variablesReference;
+    if (reference !== LOCALS_REFERENCE && reference !== GLOBALS_REFERENCE) {
       this.sendResponse(request, { variables: [] });
       return;
     }
 
-    const variables = [...this.currentVariables.values()].map((variable) => ({
-      name: variable.name,
-      value: variable.bound ? variable.value : "<unbound>",
-      type: variable.bound ? "GAP value" : "unbound",
-      variablesReference: 0
-    }));
+    const scope = reference === GLOBALS_REFERENCE ? "global" : "local";
+    const variables = [...this.currentVariables.values()]
+      .filter((variable) => variable.scope === scope)
+      .map((variable) => ({
+        name: variable.name,
+        value: variable.bound ? variable.value : "<unbound>",
+        type: variable.bound ? "GAP value" : "unbound",
+        variablesReference: 0
+      }));
     this.sendResponse(request, { variables });
   }
 
