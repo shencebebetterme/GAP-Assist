@@ -17,6 +17,7 @@ Current static inference covers:
 - call-site filter merging for user-defined function parameters
 - function return expressions
 - literals: integers, rationals, booleans, strings, lists, records, permutations
+- container structure in hovers, including list element types and record fields
 - operator-aware inference for common arithmetic, comparison, and boolean forms
 - diagnostics for obvious operator/type mismatches such as string-plus-integer
 - common GAP constructors and operations such as `SymmetricGroup`,

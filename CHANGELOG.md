@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.17
+
+- Restyled static inference hovers with a compact code-style signature block.
+- Displayed inferred list element types and record literal field types in variable hovers.
+- Preserved container element and field metadata when merging/refining inferred types.
+
 ## 0.3.16
 
 - Added diagnostics for clearly non-boolean `if`, `elif`, `while`, and `repeat ... until` conditions.

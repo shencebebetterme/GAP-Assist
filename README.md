@@ -9,7 +9,7 @@ Features:
 - Semantic highlighting for documented GAP reference symbols.
 - Hover documentation for GAP reference manual functions and operations generated from the local GAP 4.15.1 reference manual HTML files.
 - Structured hovers with section headings, styled inline code, grouped signatures, and GAP examples from the manual.
-- Static GAP inference hovers for globals, locals, functions, return values, input filters, and filter sets.
+- Static GAP inference hovers for globals, locals, functions, return values, input filters, filter sets, and container structure.
 - Local stdio GAP language server used by the extension for inference hovers.
 - Fault-tolerant parser-backed analysis for assignments, local declarations, user functions, returns, branches, and loop bodies.
 - Basic static diagnostics for likely runtime errors, including obvious invalid operator uses such as string-plus-integer arithmetic.
@@ -25,7 +25,7 @@ code --extensionDevelopmentPath "C:\Users\Ce\Documents\codex_playground\GAP_fron
 
 Open `examples/sample.g`, then hover names such as `SymmetricGroup`, `Size`, or `IsGroup`.
 
-Static inference is filter-centric. A GAP value is shown with every filter the analyzer can infer, for example `SymmetricGroup(4)` is a group object satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`; this avoids pretending GAP has a single classical OO inheritance type.
+Static inference is filter-centric. A GAP value is shown with every filter the analyzer can infer, for example `SymmetricGroup(4)` is a group object satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`; this avoids pretending GAP has a single classical OO inheritance type. Hovers use a compact signature block and show inferred container details such as `list[positive integer]` or record fields like `count: integer`.
 
 User-defined functions also get best-effort input filters. For example, if a parameter is passed to `Size(obj)` or `GeneratorsOfGroup(obj)`, the hover can show GAP declaration filters such as `IsListOrCollection` or `IsMagmaWithInverses`; if the function is later called with `SymmetricGroup(4)`, those call-site filters are merged as additional evidence.
 

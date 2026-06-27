@@ -4,6 +4,9 @@ const { parseGapSource } = require("./parser");
 
 const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const TERMINATING_CALLS = new Set(["ErrorNoReturn", "TryNextMethod"]);
+const HOVER_WRAP_COLUMN = 88;
+const MAX_HOVER_FIELDS = 8;
+const MAX_SIGNATURE_FIELDS = 4;
 
 const HARD_CODED_CALLS = {
   AlternatingGroup: callType("alternating permutation group", ["IsObject", "IsCollection", "IsMagma", "IsGroup", "IsPermGroup", "IsFinite"], "constructor"),
@@ -716,6 +719,7 @@ function refineSymbolWithFlowFilters(symbol, filters, source) {
   symbol.type = typeInfo(label, mergedFilters, {
     confidence: "flow",
     element: existing.element,
+    fields: existing.fields,
     parameterTypes: existing.parameterTypes,
     parameters: existing.parameters,
     returnType: existing.returnType,
@@ -1006,6 +1010,11 @@ function refineSymbolWithExpectedFilters(symbol, filters, source) {
   const label = symbol.scope === "parameter" ? "parameter" : existing.label;
   symbol.type = typeInfo(label, mergedFilters, {
     confidence: existing.confidence === "unknown" ? "call context" : "merged",
+    element: existing.element,
+    fields: existing.fields,
+    parameterTypes: existing.parameterTypes,
+    parameters: existing.parameters,
+    returnType: existing.returnType,
     source
   });
 }
@@ -2502,10 +2511,25 @@ function mergeTypeInfo(left, right) {
     [...(left.filters || []), ...(right.filters || [])],
     {
       confidence: left.confidence === right.confidence ? left.confidence : "merged",
-      element: left.element || right.element,
-      fields: left.fields || right.fields
+      element: left.element && right.element ? mergeTypeInfo(left.element, right.element) : left.element || right.element,
+      fields: mergeFieldMaps(left.fields, right.fields)
     }
   );
+}
+
+function mergeFieldMaps(left, right) {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+
+  const merged = { ...left };
+  for (const [name, type] of Object.entries(right)) {
+    merged[name] = merged[name] ? mergeTypeInfo(merged[name], type) : type;
+  }
+  return merged;
 }
 
 function formatInferenceMarkdown(hover) {
@@ -2514,28 +2538,28 @@ function formatInferenceMarkdown(hover) {
   }
 
   const symbol = hover.symbol;
-  const type = symbol.returnType ? symbol.type : symbol.type;
+  const type = symbol.type;
   const displayName = symbol.name || hover.word.text;
-  const lines = ["### GAP inference", ""];
-  const summary = [codeSpan(displayName)];
-  if (symbol.scope) {
-    summary.push(`_${escapeMarkdown(scopeLabel(symbol.scope))}_`);
+  const returnType = symbol.returnType || (type && type.returnType);
+  const lines = ["#### GAP inference", "", "```gap"];
+  lines.push(...formatInferenceSignatureLines(symbol, type, displayName));
+  lines.push("```", "");
+
+  if (!isFunctionType(type)) {
+    lines.push(`**Type** ${codeSpan(formatTypeExpression(type))}`, "");
   }
-  summary.push(codeSpan(formatTypeLabel(type)));
-  lines.push(summary.join(" · "), "");
 
   appendTypeDetails(lines, type);
 
-  if (symbol.returnType) {
-    lines.push(`**Returns** ${codeSpan(formatTypeLabel(symbol.returnType))}${formatInlineFilters(symbol.returnType.filters)}`, "");
-  } else if (type && type.returnType) {
-    lines.push(`**Returns** ${codeSpan(formatTypeLabel(type.returnType))}${formatInlineFilters(type.returnType.filters)}`, "");
+  if (returnType) {
+    lines.push(`**Returns** ${codeSpan(formatTypeExpression(returnType))}${formatInlineFilters(returnType.filters)}`, "");
+    appendStructureDetails(lines, returnType, "**Return structure**");
   }
 
   if (symbol.parameters && symbol.parameters.length > 0) {
     lines.push("**Parameters**");
     for (const parameter of symbol.parameters) {
-      lines.push(`- ${codeSpan(parameter.name)}: ${codeSpan(formatTypeLabel(parameter.type))}`);
+      lines.push(`- ${codeSpan(parameter.name)}: ${codeSpan(formatTypeExpression(parameter.type))}${formatInlineFilters(parameter.type && parameter.type.filters)}`);
     }
     lines.push("");
   } else if (type && type.parameters && type.parameters.length > 0) {
@@ -2559,23 +2583,138 @@ function formatInferenceMarkdown(hover) {
     lines.push(`**Declaration** \`${declaration.callee}\` · \`${declaration.file}:${declaration.line}\``, "");
   }
 
-  return lines.join("\n");
+  return trimBlankLines(lines).join("\n");
 }
 
-function appendTypeDetails(lines, type) {
+function formatInferenceSignatureLines(symbol, type, displayName) {
+  const scope = scopeLabel(symbol.scope || "symbol");
+  if (isFunctionType(type)) {
+    return formatFunctionSignatureLines(scope, displayName, symbol, type);
+  }
+
+  return formatValueSignatureLines(scope, displayName, type);
+}
+
+function formatFunctionSignatureLines(scope, displayName, symbol, type) {
+  const returnType = symbol.returnType || (type && type.returnType);
+  const params = signatureParameterEntries(symbol, type);
+  const prefix = `(${scope} function) ${displayName}`;
+  const returnExpression = formatTypeExpression(returnType);
+  const inlineParams = params.map(formatSignatureParameter).join(", ");
+  const inline = `${prefix}(${inlineParams}) -> ${returnExpression}`;
+  if (inline.length <= HOVER_WRAP_COLUMN && params.length <= 2) {
+    return [inline];
+  }
+
+  const lines = [`${prefix}(`];
+  params.forEach((parameter, index) => {
+    const suffix = index === params.length - 1 ? "" : ",";
+    lines.push(`    ${formatSignatureParameter(parameter)}${suffix}`);
+  });
+  lines.push(`) -> ${returnExpression}`);
+  return lines;
+}
+
+function formatValueSignatureLines(scope, displayName, type) {
+  const prefix = `(${scope}) ${displayName}`;
+  const expression = formatTypeExpression(type);
+  const inline = `${prefix}: ${expression}`;
+  if (inline.length <= HOVER_WRAP_COLUMN && !(type && type.fields && Object.keys(type.fields).length > 0)) {
+    return [inline];
+  }
+
+  const lines = [`${prefix}: ${formatBaseTypeLabel(type)}`];
+  if (type && type.element) {
+    lines.push(`    element: ${formatTypeExpression(type.element)}`);
+  }
+  if (type && type.fields) {
+    const fieldEntries = Object.entries(type.fields).slice(0, MAX_SIGNATURE_FIELDS);
+    for (const [name, fieldType] of fieldEntries) {
+      lines.push(`    ${name}: ${formatTypeExpression(fieldType)}`);
+    }
+    const remaining = Object.keys(type.fields).length - fieldEntries.length;
+    if (remaining > 0) {
+      lines.push(`    ... ${remaining} more fields`);
+    }
+  }
+  return lines;
+}
+
+function signatureParameterEntries(symbol, type) {
+  if (Array.isArray(symbol.parameters) && symbol.parameters.length > 0) {
+    return symbol.parameters.map((parameter, index) => ({
+      name: parameter.name || `arg${index + 1}`,
+      type: parameter.type
+    }));
+  }
+
+  const names = Array.isArray(type && type.parameters) ? type.parameters : [];
+  const parameterTypes = Array.isArray(type && type.parameterTypes) ? type.parameterTypes : [];
+  const count = Math.max(names.length, parameterTypes.length);
+  const entries = [];
+  for (let index = 0; index < count; index += 1) {
+    entries.push({
+      name: names[index] || `arg${index + 1}`,
+      type: parameterTypes[index]
+    });
+  }
+  return entries;
+}
+
+function formatSignatureParameter(parameter) {
+  return `${parameter.name}: ${formatSignatureType(parameter.type)}`;
+}
+
+function formatSignatureType(type) {
+  if (!type) {
+    return "GAP object";
+  }
+  if (isGenericTypeLabel(type.label)) {
+    return labelFromFilters(type.filters || [], meaningfulFilterLabel(type.filters || []) || "GAP object");
+  }
+  return formatTypeExpression(type);
+}
+
+function appendTypeDetails(lines, type, options = {}) {
   if (!type) {
     return;
   }
-  appendFilterLine(lines, type.filters, "**Filters**");
-  if (type.element) {
-    lines.push(`**Element** ${codeSpan(formatTypeLabel(type.element))}${formatInlineFilters(type.element.filters)}`);
+  appendFilterLine(lines, type.filters, options.filterLabel || "**Filters**");
+  appendStructureDetails(lines, type, options.structureLabel || "**Structure**");
+}
+
+function appendStructureDetails(lines, type, label) {
+  const structureLines = formatStructureLines(type);
+  if (structureLines.length === 0) {
+    return;
   }
+  lines.push(label);
+  lines.push(...structureLines);
+  lines.push("");
 }
 
 function appendFilterLine(lines, filters, label) {
   if (filters && filters.length > 0) {
-    lines.push(`${label}: ${filters.map((filter) => `\`${filter}\``).join(", ")}`);
+    lines.push(`${label}: ${filters.map((filter) => `\`${filter}\``).join(", ")}`, "");
   }
+}
+
+function formatStructureLines(type) {
+  const lines = [];
+  if (type.element) {
+    lines.push(`- element: ${codeSpan(formatTypeExpression(type.element))}${formatInlineFilters(type.element.filters)}`);
+  }
+  if (type.fields) {
+    const fieldEntries = Object.entries(type.fields).slice(0, MAX_HOVER_FIELDS);
+    for (const [name, fieldType] of fieldEntries) {
+      lines.push(`- ${codeSpan(name)}: ${codeSpan(formatTypeExpression(fieldType))}${formatInlineFilters(fieldType && fieldType.filters)}`);
+    }
+    const remaining = Object.keys(type.fields).length - fieldEntries.length;
+    if (remaining > 0) {
+      lines.push(`- ${remaining} more fields`);
+    }
+  }
+  return lines;
 }
 
 function formatInlineFilters(filters) {
@@ -2607,6 +2746,58 @@ function formatTypeLabel(type) {
     return `function(${params}) -> ${formatTypeLabel(type.returnType)}`;
   }
   return type.label || "GAP object";
+}
+
+function formatTypeExpression(type) {
+  if (!type) {
+    return "unknown";
+  }
+  if (isFunctionType(type)) {
+    const params = Array.isArray(type.parameters) ? type.parameters.join(", ") : "";
+    return `function(${params}) -> ${formatTypeExpression(type.returnType)}`;
+  }
+
+  const base = formatBaseTypeLabel(type);
+  if (type.element) {
+    return `${base}[${formatTypeExpression(type.element)}]`;
+  }
+  return base;
+}
+
+function formatBaseTypeLabel(type) {
+  if (!type) {
+    return "unknown";
+  }
+  if (isGenericTypeLabel(type.label)) {
+    return labelFromFilters(type.filters || [], type.label || "GAP object");
+  }
+  return type.label || "GAP object";
+}
+
+function isFunctionType(type) {
+  return Boolean(type && type.returnType);
+}
+
+function isGenericTypeLabel(label) {
+  return !label
+    || /^argument \d+$/.test(label)
+    || label === "parameter"
+    || label === "unknown parameter"
+    || label === "unknown local"
+    || label === "unknown GAP object";
+}
+
+function meaningfulFilterLabel(filters) {
+  const meaningful = (filters || []).filter((filter) => filter !== "IsObject");
+  return meaningful.length === 1 ? meaningful[0] : "";
+}
+
+function trimBlankLines(lines) {
+  const result = [...lines];
+  while (result.length > 0 && result[result.length - 1] === "") {
+    result.pop();
+  }
+  return result;
 }
 
 function createScope(kind, start, end, parent) {
