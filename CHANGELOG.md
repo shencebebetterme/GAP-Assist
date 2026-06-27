@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.26
+
+- Added an experimental VS Code debugger for GAP files.
+- Supported line breakpoints, statement-level `next`, `stepIn`, and `stepOut`, and runtime variable capture for hover/watch evaluation.
+- Documented GAP debugger launch configuration and default WSL launch behavior.
+
 ## 0.3.25
 
 - Added stricter structured return inference for documented algebraic objects such as magmas, semigroups, monoids, mappings, homomorphisms, and matrices.
