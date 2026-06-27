@@ -131,6 +131,12 @@ function validateDocs(docs, failures) {
     return;
   }
 
+  const sourceManuals = docs.source && Array.isArray(docs.source.manuals) ? docs.source.manuals : [];
+  const packageManuals = sourceManuals.filter((manual) => manual.type === "package");
+  if (packageManuals.length < 160) {
+    failures.push("data/gap-docs.json should include installed GAP package manuals");
+  }
+
   for (const required of ["NameFunction", "DeclareOperation", "Size", "IsGroup", "GeneratorsOfGroup"]) {
     const entries = getEntries(docs, required);
     if (!entries || entries.length === 0) {
@@ -149,9 +155,24 @@ function validateDocs(docs, failures) {
     failures.push("GeneratorsOfGroup should include its manual example block");
   }
 
+  validatePackageDocEntry(docs, failures, "Digraph", "pkg:digraphs");
+  validatePackageDocEntry(docs, failures, "ACECosetTable", "pkg:ace");
+
   const identifierNames = docs.names.filter(isIdentifier);
   if (identifierNames.length < 400) {
     failures.push("Too few identifier-like GAP symbols for semantic highlighting");
+  }
+}
+
+function validatePackageDocEntry(docs, failures, name, expectedManualId) {
+  const entries = getEntries(docs, name);
+  const entry = entries && entries.find((candidate) => candidate.manualId === expectedManualId);
+  if (!entry) {
+    failures.push(`Missing package documentation entry ${name} from ${expectedManualId}`);
+    return;
+  }
+  if (!entry.manualRelativePath || !entry.file || !entry.anchor) {
+    failures.push(`Package documentation entry ${name} should include local manual link metadata`);
   }
 }
 

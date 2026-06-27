@@ -2,7 +2,7 @@
   "name": "gap-reference-assistant",
   "displayName": "GAP Reference Assistant",
   "description": "Syntax highlighting, documented symbol highlighting, and hover reference text for GAP.",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "publisher": "local-gap",
   "license": "GPL-2.0-or-later",
   "repository": {
@@ -68,12 +68,12 @@
         "gapReference.gapInstallationPath": {
           "type": "string",
           "default": "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1",
-          "description": "Absolute path to the local GAP installation directory. The reference manual is expected under doc/ref inside this directory unless gapReference.manualPath is set."
+          "description": "Absolute path to the local GAP installation directory. Reference links use doc/ref and package links use pkg/* manual paths inside this directory unless gapReference.manualPath is set for the reference manual."
         },
         "gapReference.manualPath": {
           "type": "string",
           "default": "",
-          "description": "Optional absolute path to the GAP reference manual HTML directory. Leave empty to use gapReference.gapInstallationPath + doc/ref."
+          "description": "Optional absolute path to the GAP reference manual HTML directory. Leave empty to use gapReference.gapInstallationPath + doc/ref. Package manual links still use gapReference.gapInstallationPath when available."
         },
         "gapReference.hover.maxEntries": {
           "type": "number",

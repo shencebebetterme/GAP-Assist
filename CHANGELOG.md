@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.21
+
+- Extended generated hover documentation to installed GAP package manuals.
+- Added extraction for both GAPDoc package manuals under `pkg/*/doc` and legacy package manuals under `pkg/*/htm` or `pkg/*/doc/htm/*`.
+- Preserved package manual metadata in hover entries so local links open package pages as well as core reference pages.
+- Added validation coverage for GAPDoc-style and legacy-style package documentation entries.
+
 ## 0.3.20
 
 - Kept user-function parameter requirements from being narrowed by later call-site evidence.

@@ -6,8 +6,8 @@ Features:
 
 - GAP language registration for `.g`, `.gap`, `.gd`, `.gi`, and `.tst` files.
 - TextMate syntax highlighting for GAP comments, strings, keywords, constants, operators, declarations, and function calls.
-- Semantic highlighting for documented GAP reference symbols.
-- Hover documentation for GAP reference manual functions and operations generated from the local GAP 4.15.1 reference manual HTML files.
+- Semantic highlighting for documented GAP reference and package symbols.
+- Hover documentation for GAP reference manual and official package functions and operations generated from the local GAP 4.15.1 HTML files.
 - Structured hovers with section headings, styled inline code, grouped signatures, and GAP examples from the manual.
 - Static GAP inference hovers for globals, locals, functions, return values, input filters, filter sets, and container structure.
 - Local stdio GAP language server used by the extension for inference hovers.
@@ -67,10 +67,13 @@ Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapC
 
 ## Regenerate Documentation Data
 
-The checked-in hover data is generated from:
+The checked-in hover data is generated from the installed GAP manual tree:
 
 ```text
 C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\doc\ref
+C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\doc
+C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\htm
+C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\doc\htm\*
 ```
 
 For hover links, set `gapReference.gapInstallationPath` to your GAP installation directory, for example:
@@ -80,6 +83,7 @@ For hover links, set `gapReference.gapInstallationPath` to your GAP installation
 ```
 
 If your reference manual is not under `doc/ref` inside the installation directory, set `gapReference.manualPath` directly to the manual HTML directory.
+Package manual links use `gapReference.gapInstallationPath` plus each package manual's relative path, such as `pkg/digraphs/doc` or `pkg/ace/htm`.
 
 Regenerate it with:
 
@@ -87,13 +91,15 @@ Regenerate it with:
 npm run extract-docs
 ```
 
-Or pass a different manual directory:
+Or pass a different GAP installation directory or reference manual directory:
 
 ```powershell
 node scripts/extract-gap-docs.js "C:\path\to\gap\doc\ref"
 ```
 
-Hover links open the exact local manual section anchor, for example `chap39.html#X7B75879B8085120A`.
+Set `GAP_DOCS_INCLUDE_PACKAGES=0` before running the extractor if you only want the core reference manual.
+
+Hover links open the exact local manual section anchor, for example `chap39.html#X7B75879B8085120A` or `pkg/ace/htm/CHAP001.htm#SSEC002.1`.
 
 ## Validate
 

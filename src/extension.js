@@ -142,7 +142,11 @@ class GapHoverProvider {
       const signatures = group.signatures.length > 0 ? group.signatures : [group.entry.name];
       markdown.appendCodeblock(signatures.map((signature) => wrapSignature(signature, wrapColumn)).join("\n"), "gap");
 
-      const meta = [group.entry.kind, group.entry.section ? `section ${group.entry.section}` : undefined]
+      const meta = [
+        group.entry.kind,
+        group.entry.packageName ? `${group.entry.packageName} package` : undefined,
+        group.entry.section ? `section ${group.entry.section}` : undefined
+      ]
         .filter(Boolean)
         .join(" - ");
       if (meta) {
@@ -161,7 +165,7 @@ class GapHoverProvider {
         appendWrappedText(markdown, truncate(group.entry.description, maxDescriptionLength), wrapColumn);
       }
 
-      markdown.appendMarkdown(`[$(book) Open full local GAP reference](${manualCommandUri(group.entry)})`);
+      markdown.appendMarkdown(`[$(book) Open full local GAP documentation](${manualCommandUri(group.entry)})`);
 
       if (index < shownEntryGroups.length - 1) {
         markdown.appendMarkdown("\n\n---\n\n");
@@ -292,6 +296,8 @@ function manualCommandUri(entry) {
       {
         anchor: entry.anchor,
         file: entry.file,
+        manualId: entry.manualId,
+        manualRelativePath: entry.manualRelativePath,
         name: entry.name
       }
     ])
@@ -306,6 +312,8 @@ function groupEntries(entries = []) {
     const key = [
       entry.anchor,
       entry.file,
+      entry.manualId,
+      entry.manualRelativePath,
       entry.kind,
       entry.section,
       entry.description,
@@ -464,15 +472,60 @@ async function openLocalManual(context, docs, target) {
   }
 
   const config = vscode.workspace.getConfiguration("gapReference");
-  const manualPath = resolveManualPath(config, docs);
-  if (!manualPath) {
+  const filePath = resolveManualFilePath(config, docs, target);
+  if (!filePath) {
     vscode.window.showWarningMessage("GAP Reference Assistant has no configured GAP installation or manual path.");
     return;
   }
 
-  const url = manualSectionUrl(path.join(manualPath, target.file), target.anchor);
+  const url = manualSectionUrl(filePath, target.anchor);
   const uri = await manualRedirectUri(context, url);
   await vscode.env.openExternal(uri);
+}
+
+function resolveManualFilePath(config, docs, target) {
+  const manualPath = resolveEntryManualPath(config, docs, target);
+  return manualPath ? path.join(manualPath, target.file) : undefined;
+}
+
+function resolveEntryManualPath(config, docs, target = {}) {
+  const manualRelativePath = normalizeManualRelativePath(target.manualRelativePath);
+  const manualPath = normalizeSettingPath(config.get("manualPath", ""));
+  const gapInstallationPath = normalizeSettingPath(config.get("gapInstallationPath", ""));
+
+  if (manualRelativePath) {
+    if (manualPath && isReferenceManualTarget(target, manualRelativePath)) {
+      return manualPath;
+    }
+    if (gapInstallationPath) {
+      return path.join(gapInstallationPath, ...manualRelativePath.split("/"));
+    }
+
+    const sourceManual = findSourceManual(docs, target, manualRelativePath);
+    if (sourceManual && sourceManual.manualPath) {
+      return sourceManual.manualPath;
+    }
+
+    if (docs && docs.source && docs.source.gapRoot) {
+      return path.join(docs.source.gapRoot, ...manualRelativePath.split("/"));
+    }
+  }
+
+  return resolveManualPath(config, docs);
+}
+
+function isReferenceManualTarget(target, manualRelativePath) {
+  return target.manualId === "ref" || manualRelativePath === "doc/ref";
+}
+
+function findSourceManual(docs, target, manualRelativePath) {
+  const manuals = docs && docs.source && Array.isArray(docs.source.manuals) ? docs.source.manuals : [];
+  return manuals.find((manual) => {
+    return (
+      (target.manualId && manual.id === target.manualId) ||
+      (manualRelativePath && normalizeManualRelativePath(manual.manualRelativePath) === manualRelativePath)
+    );
+  });
 }
 
 function resolveManualPath(config, docs) {
@@ -491,6 +544,10 @@ function resolveManualPath(config, docs) {
 
 function normalizeSettingPath(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeManualRelativePath(value) {
+  return typeof value === "string" ? value.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "") : "";
 }
 
 function manualSectionUri(filePath, anchor) {
@@ -542,7 +599,8 @@ function truncate(text, maxLength) {
 
 module.exports = {
   __test: {
-    groupEntries
+    groupEntries,
+    resolveManualFilePath
   },
   activate,
   deactivate

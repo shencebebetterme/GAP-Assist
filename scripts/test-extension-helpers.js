@@ -63,6 +63,24 @@ try {
   const extension = require("../src/extension");
   assert.deepStrictEqual(extension.__test.groupEntries(undefined), [], "undocumented inferred symbols should not crash hover grouping");
   assert.deepStrictEqual(extension.__test.groupEntries([]), [], "empty documentation entries should group to an empty list");
+
+  const config = {
+    get(key, defaultValue) {
+      if (key === "gapInstallationPath") {
+        return "C:\\GAP";
+      }
+      return defaultValue;
+    }
+  };
+  assert.strictEqual(
+    extension.__test.resolveManualFilePath(
+      config,
+      { source: {} },
+      { file: "chap2.html", manualId: "pkg:digraphs", manualRelativePath: "pkg/digraphs/doc" }
+    ),
+    "C:\\GAP\\pkg\\digraphs\\doc\\chap2.html",
+    "package manual links should resolve under the configured GAP installation"
+  );
 } finally {
   Module._load = originalLoad;
 }
