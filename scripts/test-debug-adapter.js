@@ -225,6 +225,28 @@ async function main() {
   assert(n, "captured variables after stepIn should include the function parameter");
   assert.strictEqual(n.value, "3", "stepIn should capture the runtime function argument");
 
+  const stepOutEventStart = messages.length;
+  const stepOutSeq = send("stepOut", {
+    threadId: 1
+  });
+  await waitForResponse("stepOut", stepOutSeq);
+  const steppedOut = await waitForEvent("stopped", stepOutEventStart);
+  assert.strictEqual(steppedOut.body.reason, "step", "adapter should stop after a stepOut request");
+
+  const stepOutStackSeq = send("stackTrace", {
+    threadId: 1
+  });
+  const stepOutStack = await waitForResponse("stackTrace", stepOutStackSeq);
+  assert.strictEqual(stepOutStack.body.stackFrames[0].line, 9, "stepOut should return to the caller's next statement");
+
+  const stepOutVariablesSeq = send("variables", {
+    variablesReference: scopes.body.scopes[0].variablesReference
+  });
+  const stepOutVariables = await waitForResponse("variables", stepOutVariablesSeq);
+  const w = stepOutVariables.body.variables.find((variable) => variable.name === "w");
+  assert(w, "captured variables after stepOut should include w");
+  assert.strictEqual(w.value, "4", "stepOut should capture the completed caller assignment");
+
   const continueSeq = send("continue", {
     threadId: 1
   });
