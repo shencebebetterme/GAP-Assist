@@ -8,11 +8,28 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const adapterPath = path.join(root, "debug", "gapDebugAdapter.js");
+const { parseHitLine, parseVariableLine, unescapeField } = require("../debug/gapDebugAdapter");
 
 if (!hasWslGap()) {
   console.log("Debug adapter smoke test skipped because wsl gap is unavailable.");
   process.exit(0);
 }
+
+assert.strictEqual(
+  unescapeField("C:\\\\Users\\\\Ce\\\\Documents\\\\examples\\\\test.g"),
+  "C:\\Users\\Ce\\Documents\\examples\\test.g",
+  "escaped Windows paths ending in test.g should not be parsed as tab escapes"
+);
+assert.strictEqual(
+  parseHitLine("__GAPDEBUG_HIT__\t4\tC:\\\\Users\\\\Ce\\\\Documents\\\\examples\\\\test.g\t4\t1\t<main>\t0").sourcePath,
+  "C:\\Users\\Ce\\Documents\\examples\\test.g",
+  "hit source path should preserve the full Windows file name"
+);
+assert.strictEqual(
+  parseVariableLine("__GAPDEBUG_VAR__\ttext\ttrue\tline\\nnext").value,
+  "line\nnext",
+  "escaped runtime values should still decode control escapes"
+);
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-adapter-test-"));
 const program = path.join(tempDir, "sample.g");

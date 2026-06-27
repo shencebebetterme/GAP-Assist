@@ -594,12 +594,30 @@ function parseVariableLine(line) {
 }
 
 function unescapeField(value) {
-  return String(value)
-    .replace(/\\t/g, "\t")
-    .replace(/\\r/g, "\r")
-    .replace(/\\n/g, "\n")
-    .replace(/\\"/g, "\"")
-    .replace(/\\\\/g, "\\");
+  const text = String(value);
+  let result = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char !== "\\" || index === text.length - 1) {
+      result += char;
+      continue;
+    }
+
+    const next = text[index + 1];
+    index += 1;
+    if (next === "n") {
+      result += "\n";
+    } else if (next === "r") {
+      result += "\r";
+    } else if (next === "t") {
+      result += "\t";
+    } else if (next === "\"" || next === "\\") {
+      result += next;
+    } else {
+      result += `\\${next}`;
+    }
+  }
+  return result;
 }
 
 function normalizePath(value) {

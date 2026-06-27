@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.30
+
+- Fixed Windows source path decoding in the GAP debugger so paths ending in segments such as `test.g` do not lose `\t` as a tab escape.
+
 ## 0.3.29
 
 - Registered the GAP debug adapter from the extension activation path so `GAP: Debug Current File` can start the adapter reliably.
