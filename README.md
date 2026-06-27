@@ -33,6 +33,8 @@ Operator inference currently covers common arithmetic, comparison, boolean, memb
 
 Selector inference follows GAP's term-level selector behavior. The analyzer can infer element filters for `gens[1]`, preserve element filters through `gens{[1]}`, infer characters and strings from string selectors, and use record literal field types for expressions such as `rec(count := 3).count`. Clear selector mistakes such as `5[1]`, `gens["x"]`, `gens{1}`, or `[1, 2].name` are reported.
 
+Declared local variables are tracked for definite assignment. If a function declares `local value;` and then reads `value` before assigning to it, the checker reports the likely GAP runtime error; unknown identifiers that may be globals are still left alone.
+
 The analyzer also performs limited branch-sensitive filter flow. Inside a guarded block such as `if IsString(obj) then`, hovers, return inference, and operator diagnostics use `IsString` as evidence for `obj` in that branch.
 
 Negated predicates are tracked on the false path when they can be represented positively. For example, inside the `else` branch of `if not IsString(obj) then ... else ... fi`, the analyzer treats `obj` as satisfying `IsString`; the same evidence is carried through later `elif` and `else` branches.

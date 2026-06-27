@@ -205,6 +205,36 @@ assert(selectorMessages.some((message) => message.includes("index is string")), 
 assert(selectorMessages.some((message) => message.includes("positions are integer")), "sublist selector should diagnose non-list positions");
 assert(selectorMessages.some((message) => message.includes("expected a record")), "record selector should diagnose non-record bases");
 
+const unassignedLocalSample = [
+  "badLocal := function(flag)",
+  "    local value, ready;",
+  "    if flag then",
+  "        ready := value + 1;",
+  "    fi;",
+  "    value := 3;",
+  "    return value;",
+  "end;",
+  "",
+  "returnBad := function()",
+  "    local missing;",
+  "    return missing;",
+  "end;",
+  "",
+  "okLocal := function()",
+  "    local assigned;",
+  "    assigned := 1;",
+  "    return assigned;",
+  "end;",
+  ""
+].join("\n");
+const unassignedLocalAnalysis = analyzer.analyze(unassignedLocalSample, "memory://unassigned-local.g");
+const unassignedLocalDiagnostics = unassignedLocalAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "unassigned-local");
+assert.strictEqual(unassignedLocalDiagnostics.length, 2, "reads of declared locals before assignment should be diagnosed");
+assert(unassignedLocalDiagnostics[0].message.includes("value"), "assignment expression diagnostic should identify the unassigned local");
+assert.strictEqual(unassignedLocalDiagnostics[0].range.start.line, 3, "assignment expression diagnostic should point at the unassigned read");
+assert(unassignedLocalDiagnostics[1].message.includes("missing"), "return diagnostic should identify the unassigned local");
+assert.strictEqual(unassignedLocalDiagnostics[1].range.start.line, 11, "return diagnostic should point at the unassigned read");
+
 const flowSample = [
   "flow := function(obj)",
   "    if IsString(obj) then",

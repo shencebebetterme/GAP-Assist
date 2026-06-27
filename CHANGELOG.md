@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.14
+
+- Tracked assignment state for declared local variables.
+- Added diagnostics for declared locals read before they have an assigned value, including reads inside expressions and return statements.
+
 ## 0.3.13
 
 - Carried positive filter evidence from failed negated predicates into later `elif` and `else` branches.

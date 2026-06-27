@@ -161,7 +161,8 @@ function analyzeLocalDeclarationNode(statement, scope, lineStarts) {
       scope: "local",
       range: rangeFromOffset(lineStarts, name.start),
       type: typeInfo("unknown local", ["IsObject"], { confidence: "unknown" }),
-      source: "local declaration"
+      source: "local declaration",
+      assigned: false
     });
   }
 }
@@ -178,7 +179,8 @@ function analyzeAssignmentNode(statement, scope, data, lineStarts) {
     scope: scope.kind === "global" ? "global" : "local",
     range: rangeFromOffset(lineStarts, statement.nameStart),
     type: inferred,
-    source: expression.text
+    source: expression.text,
+    assigned: true
   });
 }
 
@@ -195,7 +197,8 @@ function analyzeFunctionAssignmentNode(statement, parentScope, data, functions, 
     scope: "parameter",
     range: rangeFromOffset(lineStarts, param.start),
     type: typeInfo("unknown parameter", ["IsObject"], { confidence: "unknown" }),
-    source: "function parameter"
+    source: "function parameter",
+    assigned: true
   }));
 
   for (const paramSymbol of paramSymbols) {
@@ -224,7 +227,8 @@ function analyzeFunctionAssignmentNode(statement, parentScope, data, functions, 
     type: fnType,
     source: "function definition",
     parameters: paramSymbols,
-    returnType
+    returnType,
+    assigned: true
   };
   parentScope.symbols.set(statement.name, functionSymbol);
 
@@ -411,7 +415,8 @@ function bindLoopVariable(statement, loopScope, iteratorType, lineStarts) {
     scope: "loop variable",
     range: rangeFromOffset(lineStarts, statement.variable.start),
     type: elementType,
-    source: statement.iterator ? `for ${statement.iterator.text}` : "for loop"
+    source: statement.iterator ? `for ${statement.iterator.text}` : "for loop",
+    assigned: true
   });
 }
 
@@ -451,7 +456,8 @@ function applyRefinementsToScope(refinements, scope, offset = 0) {
           scope: scope.parent && scope.parent.kind === "global" ? "global" : "local",
           range: rangeFromOffset(scope.lineStarts, offset),
           type: typeInfo("unknown GAP object", ["IsObject"], { confidence: "unknown" }),
-          source: "predicate"
+          source: "predicate",
+          assigned: true
         };
     refineSymbolWithFlowFilters(symbol, refinement.filters, refinement.source);
     scope.symbols.set(refinement.name, symbol);
@@ -778,7 +784,8 @@ function parseFunctionAssignments(text, masked, lineStarts, globalScope, data) {
       scope: "parameter",
       range: rangeFromOffset(lineStarts, match.index + match[0].indexOf(param)),
       type: typeInfo("unknown parameter", ["IsObject"], { confidence: "unknown" }),
-      source: "function parameter"
+      source: "function parameter",
+      assigned: true
     }));
 
     for (const paramSymbol of paramSymbols) {
@@ -800,7 +807,8 @@ function parseFunctionAssignments(text, masked, lineStarts, globalScope, data) {
       type: fnType,
       source: "function definition",
       parameters: paramSymbols,
-      returnType
+      returnType,
+      assigned: true
     };
     globalScope.symbols.set(name, functionSymbol);
 
@@ -845,7 +853,8 @@ function parseAssignments(text, masked, scope, data, excludedRanges = [], baseOf
       scope: scope.kind === "global" ? "global" : "local",
       range: rangeFromOffset(scope.lineStarts || computeLineStarts(text), baseOffset + match.index),
       type: inferred,
-      source: rawExpression
+      source: rawExpression,
+      assigned: true
     });
   }
 }
@@ -942,7 +951,8 @@ function parseLocalDeclarations(body, bodyOffset, lineStarts, scope) {
         scope: "local",
         range: rangeFromOffset(lineStarts, bodyOffset + match.index + match[0].indexOf(name)),
         type: typeInfo("unknown local", ["IsObject"], { confidence: "unknown" }),
-        source: "local declaration"
+        source: "local declaration",
+        assigned: false
       });
     }
   }
@@ -1036,6 +1046,7 @@ function inferExpression(expression, scope, data, expressionOffset = 0) {
 
   const symbol = lookupSymbol(scope, expr);
   if (symbol) {
+    reportUnassignedLocalRead(symbol, data, expressionOffset, expr.length);
     return symbol.type;
   }
 
@@ -1748,6 +1759,20 @@ function reportDiagnostic(data, offset, length, message, options = {}) {
   });
 }
 
+function reportUnassignedLocalRead(symbol, data, offset, length) {
+  if (!symbol || symbol.scope !== "local" || symbol.assigned !== false) {
+    return;
+  }
+
+  reportDiagnostic(
+    data,
+    offset,
+    length,
+    `Local variable ${symbol.name} may fail: it is read before it has an assigned value.`,
+    { code: "unassigned-local", severity: 2 }
+  );
+}
+
 function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans = []) {
   const local = lookupSymbol(scope, name);
   if (local && local.returnType) {
@@ -1854,7 +1879,8 @@ function inferArrowCallback(argumentText, mapper, firstParameterType, scope, dat
       scope: "parameter",
       range: rangeFromOffset(data.lineStarts, expressionOffset + span.start + param.start),
       type: paramType,
-      source: parameterSource
+      source: parameterSource,
+      assigned: true
     });
   });
 
