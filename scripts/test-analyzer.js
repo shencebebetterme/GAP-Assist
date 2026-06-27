@@ -187,6 +187,46 @@ assert(!hoverAlternatingGroup.symbol.returnType.filters.includes("IsInt"), "Alte
 const hoverGroupConstructor = analyzer.hoverAt("Group((1,2));", 0, 1);
 assert(hoverGroupConstructor.symbol.returnType.filters.includes("IsGroup"), "Group hover should infer the generated group return");
 
+const hoverMathieuGroup = analyzer.hoverAt("MathieuGroup(11);", 0, 1);
+assert(hoverMathieuGroup.symbol.returnType.filters.includes("IsGroup"), "MathieuGroup hover should infer a group return");
+assert(!hoverMathieuGroup.symbol.returnType.filters.includes("IsList"), "MathieuGroup should not infer a list return from its allowed-degree set");
+
+const hoverSubgroupShell = analyzer.hoverAt("SubgroupShell(G);", 0, 1);
+assert(hoverSubgroupShell.symbol.returnType.filters.includes("IsGroup"), "SubgroupShell hover should infer subgroup-like returns");
+assert(!hoverSubgroupShell.symbol.returnType.filters.includes("IsList"), "SubgroupShell should not infer a list return from later generator prose");
+
+const hoverMagma = analyzer.hoverAt("Magma([a, b]);", 0, 1);
+assert(hoverMagma.symbol.returnType.filters.includes("IsMagma"), "Magma hover should infer a magma return");
+assert(!hoverMagma.symbol.returnType.filters.includes("IsList"), "Magma should not infer a list return from its generators argument");
+
+const hoverPermutationMat = analyzer.hoverAt("PermutationMat((1,2), 3);", 0, 1);
+assert(hoverPermutationMat.symbol.returnType.filters.includes("IsMatrix"), "PermutationMat hover should infer a matrix return");
+assert(!hoverPermutationMat.symbol.returnType.filters.includes("IsInt"), "PermutationMat should not infer an integer return from dimension prose");
+
+const hoverIdentityMat = analyzer.hoverAt("IdentityMat(3);", 0, 1);
+assert(hoverIdentityMat.symbol.returnType.filters.includes("IsMatrix"), "IdentityMat hover should infer a matrix return");
+
+const hoverDeterminant = analyzer.hoverAt("DeterminantMat([[1]]);", 0, 1);
+assert(hoverDeterminant.symbol.returnType.filters.includes("IsRingElement"), "Determinant hover should infer a scalar/ring-element return");
+assert(!hoverDeterminant.symbol.returnType.filters.includes("IsMatrix"), "Determinant should not infer a matrix return from its matrix argument");
+
+const hoverPermanent = analyzer.hoverAt("Permanent([[1]]);", 0, 1);
+assert(hoverPermanent.symbol.returnType.filters.includes("IsRingElement"), "Permanent hover should infer a scalar/ring-element return");
+assert(!hoverPermanent.symbol.returnType.filters.includes("IsMatrix"), "Permanent should not infer a matrix return from its matrix argument");
+
+const hoverNumberFFVector = analyzer.hoverAt("NumberFFVector(v, 3);", 0, 1);
+assert(hoverNumberFFVector.symbol.returnType.filters.includes("IsInt"), "NumberFFVector should prefer the first explicit integer return clause");
+
+const hoverWeightVecFFE = analyzer.hoverAt("WeightVecFFE(v);", 0, 1);
+assert(hoverWeightVecFFE.symbol.returnType.filters.includes("IsInt"), "WeightVecFFE should infer an integer weight return");
+
+const hoverDistanceVecFFE = analyzer.hoverAt("DistanceVecFFE(v, w);", 0, 1);
+assert(hoverDistanceVecFFE.symbol.returnType.filters.includes("IsInt"), "DistanceVecFFE should infer an integer distance return");
+
+const hoverIdentityMapping = analyzer.hoverAt("IdentityMapping(D);", 0, 1);
+assert(hoverIdentityMapping.symbol.returnType.filters.includes("IsGeneralMapping"), "IdentityMapping hover should infer a mapping return");
+assert(!hoverIdentityMapping.symbol.returnType.filters.includes("IsList"), "IdentityMapping should not infer a list return from source/range collections");
+
 const hoverAllPrimes = analyzer.hoverAt("AllPrimes;", 0, 1);
 assert(hoverAllPrimes && !hoverAllPrimes.symbol.returnType, "documented variables should not be modeled as functions");
 assert(hoverAllPrimes.symbol.type.filters.includes("IsList"), "documented set/list variables should infer collection-like values");

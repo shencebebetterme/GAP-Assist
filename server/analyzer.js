@@ -2819,11 +2819,11 @@ function explicitReturnText(text, name) {
   const normalized = normalizeDocumentationText(text);
   const namePattern = name ? escapeRegExp(name) : "[A-Za-z_][A-Za-z0-9_]*";
   const patterns = [
-    new RegExp(`(?:^|[.!?]\\s+)(?:this\\s+(?:function|operation|attribute|method)\\s+)?${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
-    new RegExp(`\\b${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
-    new RegExp(`\\b${namePattern}\\s*\\([^)]*\\)\\s+(?:is|are)\\s+([^.!?]+)`, "i"),
     /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?:?\s+([^.!?]+)/i,
     /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?\s+([^.!?]+)/i,
+    new RegExp(`(?:^|[.!?]\\s+)(?:this\\s+(?:function|operation|attribute|method)\\s+)?${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
+    new RegExp(`\\b${namePattern}\\s*\\([^)]*\\)\\s+(?:is|are)\\s+([^.!?]+)`, "i"),
+    new RegExp(`\\b${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
     /^is\s+([^.!?]+)/i
   ];
 
@@ -2868,24 +2868,27 @@ function inferTypeFromDocumentationClause(clause, confidence) {
   if (/\b(greatest common divisor|gcd|standard associate|ring element|scalar|element of (?:a |the )?group ring)\b/.test(text)) {
     return typeInfo("ring element", ["IsObject", "IsRingElement"], { confidence });
   }
+  if (/\b(determinant|permanent)\b/.test(text) && /\bmatrix\b/.test(text)) {
+    return typeInfo("ring element", ["IsObject", "IsRingElement"], { confidence });
+  }
   if (/\bgroup element\b/.test(text)) {
     return typeInfo("group element", ["IsObject", "IsMultiplicativeElementWithInverse"], { confidence });
   }
   if (/\b(string|character)\b/.test(text)) {
     return typeInfo("string", ["IsObject", "IsString", "IsList"], { confidence });
   }
-  if (isListReturnClause(text)) {
-    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence });
+  const structuredType = inferStructuredReturnType(text, confidence);
+  if (structuredType) {
+    return structuredType;
   }
-  if (isGroupReturnClause(text)) {
-    const filters = ["IsObject", "IsCollection", "IsMagma", "IsGroup"];
-    if (/\b(permutation|symmetric|alternating)\b/.test(text)) {
-      filters.push("IsPermGroup");
-    }
-    return typeInfo("group", filters, { confidence });
+  if (isExplicitListReturnClause(text)) {
+    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence });
   }
   if (isIntegerReturnClause(text)) {
     return typeInfo("integer", ["IsObject", "IsInt"], { confidence });
+  }
+  if (isListReturnClause(text)) {
+    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence });
   }
 
   return undefined;
@@ -2904,15 +2907,120 @@ function isListReturnClause(text) {
   return true;
 }
 
+function isExplicitListReturnClause(text) {
+  if (!isListReturnClause(text)) {
+    return false;
+  }
+  const article = "(?:an?|the)?\\s*";
+  const adjective = "(?!(?:of|from|to|with|in|on|over|under|by|for|that|which)\\b)[\\w()×.-]+,?\\s+";
+  return new RegExp(`^${article}(?:${adjective}){0,5}(?:list|lists|collection|set)\\b`, "i").test(text);
+}
+
 function isIntegerReturnClause(text) {
-  return /\b(integer|positive integer|nonnegative integer|number of|length of|size of|order of|index|rank|degree|dimension|position|count)\b/.test(text);
+  return /\b(integer|positive integer|nonnegative integer|number of|length of|size of|order of|index|rank|degree|dimension|position|count|weight|distance)\b/.test(text);
+}
+
+function inferStructuredReturnType(text, confidence) {
+  if (isGroupReturnClause(text)) {
+    const filters = ["IsObject", "IsCollection", "IsMagma", "IsGroup"];
+    if (/\b(permutation|symmetric|alternating|mathieu|matrix)\b/.test(text)) {
+      filters.push("IsPermGroup");
+    }
+    return typeInfo("group", filters, { confidence });
+  }
+  if (isMatrixReturnClause(text)) {
+    return typeInfo("matrix", ["IsObject", "IsMatrix", "IsList"], { confidence });
+  }
+  if (isMappingReturnClause(text)) {
+    const label = /\bhomomorphism\b/.test(text)
+      ? "homomorphism"
+      : /\bisomorphism\b/.test(text)
+        ? "isomorphism"
+        : /\bepimorphism\b/.test(text)
+          ? "epimorphism"
+          : /\bmonomorphism\b/.test(text)
+            ? "monomorphism"
+            : "mapping";
+    return typeInfo(label, ["IsObject", "IsGeneralMapping"], { confidence });
+  }
+  if (isMagmaReturnClause(text)) {
+    return typeInfo("magma", ["IsObject", "IsCollection", "IsMagma"], { confidence });
+  }
+  if (isSemigroupReturnClause(text)) {
+    return typeInfo("semigroup", ["IsObject", "IsCollection", "IsMagma", "IsSemigroup"], { confidence });
+  }
+  if (isMonoidReturnClause(text)) {
+    return typeInfo("monoid", ["IsObject", "IsCollection", "IsMagma", "IsMagmaWithOne", "IsMonoid"], { confidence });
+  }
+  if (isRingReturnClause(text)) {
+    return typeInfo("ring", ["IsObject", "IsRing"], { confidence });
+  }
+  if (isFieldReturnClause(text)) {
+    return typeInfo("field", ["IsObject", "IsField"], { confidence });
+  }
+  if (isAlgebraReturnClause(text)) {
+    return typeInfo("algebra", ["IsObject", "IsAlgebra"], { confidence });
+  }
+  if (isModuleReturnClause(text)) {
+    return typeInfo("module", ["IsObject", "IsModule"], { confidence });
+  }
+  if (isVectorSpaceReturnClause(text)) {
+    return typeInfo("vector space", ["IsObject", "IsVectorSpace"], { confidence });
+  }
+  return undefined;
+}
+
+function startsWithDocumentedObject(text, objectPattern) {
+  const article = "(?:an?|the|a new|new|one \\(of possibly several\\))?\\s*";
+  const adjective = "(?!(?:of|from|to|with|in|on|over|under|by|for|that|which)\\b)[\\w()×.-]+,?\\s+";
+  return new RegExp(`^${article}(?:${adjective}){0,5}${objectPattern}\\b`, "i").test(text);
 }
 
 function isGroupReturnClause(text) {
   if (/\b(?:element of (?:a |the )?group|group element|group ring)\b/.test(text)) {
     return false;
   }
-  return /^(?:an?|the|a new|new)?\s*(?:[a-z0-9_-]+,?\s+){0,6}(?:group|subgroup|coset)\b/.test(text);
+  return startsWithDocumentedObject(text, "(?:group|subgroup|coset)");
+}
+
+function isMatrixReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:matrix|matrices)");
+}
+
+function isMappingReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:mapping|homomorphism|isomorphism|epimorphism|monomorphism)");
+}
+
+function isMagmaReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:magma|magma-with-one|magma-with-inverses)");
+}
+
+function isSemigroupReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:semigroup|inverse semigroup)");
+}
+
+function isMonoidReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:monoid|inverse monoid)");
+}
+
+function isRingReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:ring)");
+}
+
+function isFieldReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:field)");
+}
+
+function isAlgebraReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:algebra)");
+}
+
+function isModuleReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:module)");
+}
+
+function isVectorSpaceReturnClause(text) {
+  return startsWithDocumentedObject(text, "(?:vector space|space)");
 }
 
 function normalizeDocumentationText(text) {

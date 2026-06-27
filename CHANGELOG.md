@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.25
+
+- Added stricter structured return inference for documented algebraic objects such as magmas, semigroups, monoids, mappings, homomorphisms, and matrices.
+- Fixed constructors such as `Magma`, `MathieuGroup`, `SubgroupShell`, `IdentityMat`, and `PermutationMat` so incidental list/dimension prose does not override the actual return object.
+- Classified determinant/permanent-style matrix functions as scalar/ring-element returns instead of matrix returns.
+- Preferred the first explicit `returns ...` sentence before later fallback sentences such as `Name returns fail`.
+- Improved integer return inference for documented finite-field vector helpers such as `NumberFFVector`, `WeightVecFFE`, and `DistanceVecFFE`.
+
 ## 0.3.24
 
 - Fixed group constructor hovers such as `SymmetricGroup` and `AlternatingGroup` so degree prose is not misread as an integer return type.
