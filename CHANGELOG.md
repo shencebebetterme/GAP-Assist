@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.24
+
+- Fixed group constructor hovers such as `SymmetricGroup` and `AlternatingGroup` so degree prose is not misread as an integer return type.
+- Preferred high-confidence analyzer return models for known GAP calls in system hovers, including precise generator-list element types.
+- Inferred documented signature parameter types for common GAP prose patterns such as optional filters, degree/rank integers, list-of-integers arguments, and group/subgroup parameters.
+- Aligned diagnostics with omitted optional signature parameters, so calls like `SymmetricGroup(4)` and `SymmetricGroup(IsPermGroup, 4)` check the actual degree argument.
+- Added element-type checks for clear list-argument mismatches such as passing a string where `list[integer]` is expected.
+- Tightened filter compatibility so broad supertypes such as `IsCollection` do not satisfy more specific group requirements.
+
 ## 0.3.23
 
 - Reworked documentation-derived return inference to use explicit return/value clauses instead of scanning whole prose blocks.

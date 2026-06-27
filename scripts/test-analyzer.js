@@ -100,7 +100,8 @@ assert(builtinMarkdown.includes("<div style="), "static hover should include a c
 assert(builtinMarkdown.includes("# system function"), "documented hover should show the callable scope");
 assert(builtinMarkdown.includes("<code>GeneratorsOfGroup</code>"), "documented hover should show the callable name");
 assert(builtinMarkdown.includes("<strong>group</strong>"), "documented hover should style group-like input types");
-assert(builtinMarkdown.includes("<strong>list</strong>"), "documented hover should style return types");
+assert(builtinMarkdown.includes("<strong>list of group generators</strong>"), "documented hover should style precise return types");
+assert(builtinMarkdown.includes("<strong>group element</strong>"), "documented hover should show precise return element types");
 assert(!builtinMarkdown.includes("**Type**"), "static hover should not repeat the signature type");
 assert(!builtinMarkdown.includes("**Filters**"), "static hover should not repeat top-level filters");
 assert(!builtinMarkdown.includes("Input filters"), "static hover should not repeat signature input filters");
@@ -146,6 +147,10 @@ assert(!hoverPermutable.symbol.returnType.filters.includes("IsGroup"), "boolean 
 const hoverIndex = analyzer.hoverAt("Index(G, U);", 0, 1);
 assert(hoverIndex.symbol.returnType.filters.includes("IsInt"), "Index should infer an integer return from its named return clause");
 assert(!hoverIndex.symbol.returnType.filters.includes("IsGroup"), "Index should not infer a group return from subgroup argument prose");
+const hoverIndexMarkdown = formatInferenceMarkdown(hoverIndex);
+assert(hoverIndexMarkdown.includes("<code>G</code>"), "Index hover should keep the documented group parameter name");
+assert(hoverIndexMarkdown.includes("<code>U</code>"), "Index hover should keep the documented subgroup parameter name");
+assert(hoverIndexMarkdown.includes("<strong>group</strong>"), "Index hover should infer group parameter types from the matching doc entry");
 
 const hoverLength = analyzer.hoverAt("Length([1, 2]);", 0, 1);
 assert(hoverLength.symbol.returnType.filters.includes("IsInt"), "Length should infer an integer return");
@@ -157,6 +162,30 @@ assert(!hoverAdd.symbol.returnType.filters.includes("IsList"), "mutators such as
 const hoverAbelianGroup = analyzer.hoverAt("AbelianGroup([2, 3]);", 0, 1);
 assert(hoverAbelianGroup.symbol.returnType.filters.includes("IsGroup"), "constructors mentioning list arguments should still infer constructed groups");
 assert(!hoverAbelianGroup.symbol.returnType.filters.includes("IsList"), "AbelianGroup should not infer a list return from its ints list argument");
+const hoverAbelianGroupMarkdown = formatInferenceMarkdown(hoverAbelianGroup);
+assert(hoverAbelianGroupMarkdown.includes("<code>filt</code>"), "AbelianGroup hover should show the optional filter parameter");
+assert(hoverAbelianGroupMarkdown.includes("<strong>filter</strong>"), "optional filter parameters should be typed as filters");
+assert(hoverAbelianGroupMarkdown.includes("<code>ints</code>"), "AbelianGroup hover should show the integer-list parameter");
+assert(hoverAbelianGroupMarkdown.includes("<strong>list</strong>"), "AbelianGroup ints parameter should be list-typed");
+assert(hoverAbelianGroupMarkdown.includes("<strong>integer</strong>"), "AbelianGroup ints parameter should show integer elements");
+
+const hoverSymmetricGroup = analyzer.hoverAt("SymmetricGroup(4);", 0, 1);
+assert(hoverSymmetricGroup.symbol.returnType.filters.includes("IsGroup"), "SymmetricGroup hover should infer a group return");
+assert(hoverSymmetricGroup.symbol.returnType.filters.includes("IsPermGroup"), "SymmetricGroup hover should infer a permutation group return");
+assert(!hoverSymmetricGroup.symbol.returnType.filters.includes("IsInt"), "SymmetricGroup hover should not confuse degree prose for its return type");
+const hoverSymmetricGroupMarkdown = formatInferenceMarkdown(hoverSymmetricGroup);
+assert(hoverSymmetricGroupMarkdown.includes("<code>filt</code>"), "SymmetricGroup hover should keep the optional filter parameter");
+assert(hoverSymmetricGroupMarkdown.includes("<strong>filter</strong>"), "SymmetricGroup optional filter should be filter-typed");
+assert(hoverSymmetricGroupMarkdown.includes("<code>deg</code>"), "SymmetricGroup hover should keep the degree parameter");
+assert(hoverSymmetricGroupMarkdown.includes("<strong>integer</strong>"), "SymmetricGroup degree parameter should be integer-typed");
+
+const hoverAlternatingGroup = analyzer.hoverAt("AlternatingGroup(4);", 0, 1);
+assert(hoverAlternatingGroup.symbol.returnType.filters.includes("IsGroup"), "AlternatingGroup hover should infer a group return");
+assert(hoverAlternatingGroup.symbol.returnType.filters.includes("IsPermGroup"), "AlternatingGroup hover should infer a permutation group return");
+assert(!hoverAlternatingGroup.symbol.returnType.filters.includes("IsInt"), "AlternatingGroup hover should not confuse degree prose for its return type");
+
+const hoverGroupConstructor = analyzer.hoverAt("Group((1,2));", 0, 1);
+assert(hoverGroupConstructor.symbol.returnType.filters.includes("IsGroup"), "Group hover should infer the generated group return");
 
 const hoverAllPrimes = analyzer.hoverAt("AllPrimes;", 0, 1);
 assert(hoverAllPrimes && !hoverAllPrimes.symbol.returnType, "documented variables should not be modeled as functions");
@@ -439,6 +468,25 @@ const branchHover = flowAnalysis.hoverAt(2, 17);
 assert(branchHover && branchHover.symbol.name === "obj", "hover inside a branch should resolve the parameter");
 assert(branchHover.symbol.type.filters.includes("IsString"), "branch hover should include the predicate filter");
 
+const optionalFilterCallSample = [
+  "ok1 := SymmetricGroup(4);",
+  "ok2 := SymmetricGroup(IsPermGroup, 4);",
+  "badDegree := SymmetricGroup(IsPermGroup, \"bad\");",
+  "ok3 := AbelianGroup([2, 3]);",
+  "ok4 := AbelianGroup(IsPermGroup, [2, 3]);",
+  "badInts := AbelianGroup(IsPermGroup, \"bad\");",
+  ""
+].join("\n");
+const optionalFilterCallAnalysis = analyzer.analyze(optionalFilterCallSample, "memory://optional-filter-calls.g");
+const optionalFilterDiagnostics = optionalFilterCallAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "call-argument-filter");
+assert.strictEqual(optionalFilterDiagnostics.length, 2, "optional filter arguments should not shift required argument diagnostics");
+assert(optionalFilterDiagnostics[0].message.includes("SymmetricGroup argument 2 may fail"), "SymmetricGroup should diagnose the actual degree argument");
+assert(optionalFilterDiagnostics[0].message.includes("expected `IsInt`"), "SymmetricGroup degree diagnostic should expect an integer");
+assert.strictEqual(optionalFilterDiagnostics[0].range.start.line, 2, "SymmetricGroup diagnostic should point at the bad degree line");
+assert(optionalFilterDiagnostics[1].message.includes("AbelianGroup argument 2 may fail"), "AbelianGroup should diagnose the actual integer-list argument");
+assert(optionalFilterDiagnostics[1].message.includes("list[integer]"), "AbelianGroup diagnostic should include the expected list element type");
+assert.strictEqual(optionalFilterDiagnostics[1].range.start.line, 5, "AbelianGroup diagnostic should point at the bad ints line");
+
 const callDiagnosticSample = [
   "n := 5;",
   "GeneratorsOfGroup(n);",
@@ -458,7 +506,7 @@ const callDiagnosticAnalysis = analyzer.analyze(callDiagnosticSample, "memory://
 const callDiagnostics = callDiagnosticAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "call-argument-filter");
 assert.strictEqual(callDiagnostics.length, 2, "clearly incompatible declaration-filter calls should be diagnosed");
 assert(callDiagnostics[0].message.includes("GeneratorsOfGroup argument 1 may fail"), "call diagnostic should identify the callable");
-assert(callDiagnostics[0].message.includes("expected `IsMagmaWithInverses`"), "call diagnostic should include expected GAP filters");
+assert(callDiagnostics[0].message.includes("`IsMagmaWithInverses`"), "call diagnostic should include expected GAP filters");
 assert(callDiagnostics[0].message.includes("got integer"), "direct call diagnostic should use the inferred argument type");
 assert.strictEqual(callDiagnostics[0].range.start.line, 1, "direct call diagnostic should point at the bad call line");
 assert(callDiagnostics[1].message.includes("got string"), "branch call diagnostic should use the branch-refined type");
@@ -490,7 +538,7 @@ const userFunctionCallAnalysis = analyzer.analyze(userFunctionCallSample, "memor
 const userCallDiagnostics = userFunctionCallAnalysis.diagnostics.filter((diagnostic) => diagnostic.code === "user-call-argument-filter");
 assert.strictEqual(userCallDiagnostics.length, 2, "inferred user-function parameter calls should be diagnosed when incompatible");
 assert(userCallDiagnostics[0].message.includes("uses argument 1 may fail"), "user call diagnostic should identify the function");
-assert(userCallDiagnostics[0].message.includes("expects `IsMagmaWithInverses`"), "user call diagnostic should include inferred parameter filters");
+assert(userCallDiagnostics[0].message.includes("`IsMagmaWithInverses`"), "user call diagnostic should include inferred parameter filters");
 assert(userCallDiagnostics[0].message.includes("got integer"), "direct user call diagnostic should use the inferred argument type");
 assert.strictEqual(userCallDiagnostics[0].range.start.line, 6, "direct user call diagnostic should point at the call argument");
 assert(userCallDiagnostics[1].message.includes("got string"), "branch user call diagnostic should use branch-refined filters");

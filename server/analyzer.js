@@ -728,6 +728,7 @@ function refineSymbolWithFlowFilters(symbol, filters, source) {
     element: existing.element,
     fields: existing.fields,
     parameterTypes: existing.parameterTypes,
+    parameterMetadata: existing.parameterMetadata,
     parameters: existing.parameters,
     returnType: existing.returnType,
     source
@@ -764,6 +765,12 @@ function labelFromFilters(filters, fallback) {
   }
   if (filters.includes("IsList")) {
     return "list";
+  }
+  if (filters.includes("IsListOrCollection")) {
+    return "list or collection";
+  }
+  if (filters.includes("IsCollection")) {
+    return "collection";
   }
   if (filters.includes("IsRecord")) {
     return "record";
@@ -952,7 +959,7 @@ function parseAssignments(text, masked, scope, data, excludedRanges = [], baseOf
 function refineSymbolsFromCallArgumentFilters(text, masked, scope, data, baseOffset = 0) {
   for (const call of findCalls(text, masked, baseOffset)) {
     const callable = documentedCallableInfo(call.name, data);
-    const parameterTypes = callable && callable.type && callable.type.parameterTypes;
+    const parameterTypes = callParameterTypesForArgs(callable, call.args, scope, data, baseOffset);
     if (!parameterTypes || parameterTypes.length === 0) {
       continue;
     }
@@ -1029,6 +1036,7 @@ function refineSymbolWithExpectedFilters(symbol, filters, source, options = {}) 
       fields: existing.fields,
       observedFilters,
       parameterTypes: existing.parameterTypes,
+      parameterMetadata: existing.parameterMetadata,
       parameters: existing.parameters,
       returnType: existing.returnType,
       source: existing.source
@@ -1044,6 +1052,7 @@ function refineSymbolWithExpectedFilters(symbol, filters, source, options = {}) 
     fields: existing.fields,
     observedFilters,
     parameterTypes: existing.parameterTypes,
+    parameterMetadata: existing.parameterMetadata,
     parameters: existing.parameters,
     returnType: existing.returnType,
     source
@@ -2163,7 +2172,7 @@ function elementTypeFromCollection(collectionType) {
     return undefined;
   }
   if (hasAnyFilter(collectionType, ["IsString"])) {
-    return typeInfo("character", ["IsObject"], { confidence: "string element" });
+    return typeInfo("character", ["IsObject", "IsChar"], { confidence: "string element" });
   }
   if (hasAnyFilter(collectionType, ["IsGroup", "IsMagmaWithInverses", "IsPermGroup"])) {
     const filters = ["IsObject", "IsMultiplicativeElementWithInverse"];
@@ -2234,7 +2243,7 @@ function userFunctionParameterTypes(symbol) {
 }
 
 function reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset, argumentSpans, callable) {
-  const parameterTypes = callable && callable.type && callable.type.parameterTypes;
+  const parameterTypes = callParameterTypesForArgs(callable, args, scope, data, expressionOffset, argumentSpans);
   if (!Array.isArray(parameterTypes) || parameterTypes.length === 0) {
     return;
   }
@@ -2246,8 +2255,11 @@ function reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset
     }
 
     const span = argumentSpans[index] || { text: argument, start: 0, end: argument.length };
+    if (argumentSatisfiesExpectedFunction(argument, expected)) {
+      return;
+    }
     const actual = inferExpression(argument, scope, data, expressionOffset + span.start);
-    if (!isClearlyIncompatibleWithExpectedFilters(actual, expected.filters)) {
+    if (!isClearlyIncompatibleWithExpectedType(actual, expected)) {
       return;
     }
 
@@ -2255,10 +2267,102 @@ function reportCallArgumentDiagnostics(name, args, scope, data, expressionOffset
       data,
       expressionOffset + span.start,
       Math.max(1, span.text.trim().length),
-      `${name} argument ${index + 1} may fail: expected ${formatFilterExpectation(expected.filters)}, got ${formatTypeLabel(actual)}.`,
+      `${name} argument ${index + 1} may fail: expected ${formatExpectedArgumentType(expected)}, got ${formatTypeLabel(actual)}.`,
       { code: "call-argument-filter", severity: 2 }
     );
   });
+}
+
+function argumentSatisfiesExpectedFunction(argument, expected) {
+  return Boolean(
+    expected
+    && hasAnyFilter(expected, ["IsFunction"])
+    && parseArrowFunctionExpression(argument)
+  );
+}
+
+function callParameterTypesForArgs(callable, args, scope, data, expressionOffset = 0, argumentSpans = []) {
+  const type = callable && callable.type;
+  const parameterTypes = type && type.parameterTypes;
+  if (!Array.isArray(parameterTypes) || parameterTypes.length === 0) {
+    return [];
+  }
+
+  const metadata = parameterMetadataForType(type);
+  if (metadata.length === 0 || metadata.length !== parameterTypes.length) {
+    return parameterTypes;
+  }
+
+  const aligned = [];
+  let parameterIndex = 0;
+  for (let argumentIndex = 0; argumentIndex < args.length; argumentIndex += 1) {
+    while (
+      parameterIndex < metadata.length
+      && metadata[parameterIndex].optional
+      && shouldSkipOptionalParameter(metadata, parameterIndex, args, argumentIndex, scope, data)
+    ) {
+      parameterIndex += 1;
+    }
+    aligned.push(parameterTypes[parameterIndex]);
+    parameterIndex += 1;
+  }
+  return aligned;
+}
+
+function parameterMetadataForType(type) {
+  if (Array.isArray(type && type.parameterMetadata) && type.parameterMetadata.length > 0) {
+    return type.parameterMetadata;
+  }
+  const signatures = Array.isArray(type && type.signatures) ? type.signatures : [];
+  return signatureParameterMetadata(signatures[0]);
+}
+
+function shouldSkipOptionalParameter(metadata, parameterIndex, args, argumentIndex, scope, data) {
+  const remainingArguments = args.length - argumentIndex;
+  const requiredAfterSkipping = metadata
+    .slice(parameterIndex + 1)
+    .filter((parameter) => !parameter.optional)
+    .length;
+  if (remainingArguments <= requiredAfterSkipping) {
+    return true;
+  }
+
+  const parameter = metadata[parameterIndex];
+  if (isFilterParameterName(parameter.name)) {
+    return !argumentLooksLikeFilter(args[argumentIndex], scope, data);
+  }
+
+  return false;
+}
+
+function argumentLooksLikeFilter(argument, scope, data) {
+  const text = String(argument || "").trim();
+  if (/^Is[A-Z][A-Za-z0-9_]*$/.test(text)) {
+    return true;
+  }
+  if (!IDENTIFIER_RE.test(text)) {
+    return false;
+  }
+
+  const symbol = lookupSymbol(scope, text) || documentedCallableInfo(text, data);
+  const type = symbol && symbol.type;
+  return Boolean(type && hasAnyFilter(type, ["IsFunction"]));
+}
+
+function isClearlyIncompatibleWithExpectedType(actual, expected) {
+  if (!expected) {
+    return false;
+  }
+  if (isClearlyIncompatibleWithExpectedFilters(actual, expected.filters)) {
+    return true;
+  }
+
+  if (!expected.element) {
+    return false;
+  }
+
+  const actualElement = (actual && actual.element) || elementTypeFromCollection(actual);
+  return isClearlyIncompatibleWithExpectedFilters(actualElement, expected.element.filters);
 }
 
 function isClearlyIncompatibleWithExpectedFilters(actual, expectedFilters) {
@@ -2269,7 +2373,7 @@ function isClearlyIncompatibleWithExpectedFilters(actual, expectedFilters) {
     return false;
   }
 
-  const meaningfulExpectedFilters = expectedFilters.filter((filter) => filter !== "IsObject");
+  const meaningfulExpectedFilters = compatibilityExpectedFilters(expectedFilters);
   if (meaningfulExpectedFilters.length === 0) {
     return false;
   }
@@ -2292,6 +2396,30 @@ function isClearlyIncompatibleWithExpectedFilters(actual, expectedFilters) {
   }
 
   return hasAnyConcreteFamily(actualFamilies);
+}
+
+function compatibilityExpectedFilters(filters) {
+  const expanded = expandedFilters(filters || []);
+  const narrowGroups = [
+    ["IsPermGroup", "IsGroup", "IsMagmaWithInverses", "IsMagma"],
+    ["IsPerm"],
+    ["IsFunction"],
+    ["IsBool"],
+    ["IsString"],
+    ["IsChar"],
+    ["IsInt", "IsPosInt", "IsNonnegativeInt", "IsRat", "IsFloat", "IsCyc", "IsCyclotomic"],
+    ["IsRecord"],
+    ["IsList", "IsDenseList"]
+  ];
+
+  for (const group of narrowGroups) {
+    const present = group.filter((filter) => expanded.has(filter));
+    if (present.length > 0) {
+      return present;
+    }
+  }
+
+  return [...expanded].filter((filter) => filter !== "IsObject");
 }
 
 function expandedFilters(filters) {
@@ -2343,6 +2471,9 @@ function filterFamily(filter) {
   if (["IsString"].includes(filter)) {
     return "string";
   }
+  if (["IsChar"].includes(filter)) {
+    return "character";
+  }
   if (["IsList", "IsDenseList", "IsListOrCollection"].includes(filter)) {
     return "list-or-collection";
   }
@@ -2372,6 +2503,13 @@ function formatFilterExpectation(filters) {
   return filters.map((filter) => `\`${filter}\``).join(", ");
 }
 
+function formatExpectedArgumentType(expected) {
+  if (expected && expected.element) {
+    return `${formatTypeExpression(expected)} (${formatFilterExpectation(expected.filters || [])})`;
+  }
+  return formatFilterExpectation((expected && expected.filters) || []);
+}
+
 function addCallContext(type, name, args, scope) {
   const enriched = cloneType(type);
   enriched.source = `${name}(...)`;
@@ -2392,6 +2530,8 @@ function documentedCallableInfo(name, data) {
   }
 
   const entry = entries[0];
+  const signatureMetadata = signatureParameterMetadata(entry.signature);
+  const signatureNames = signatureMetadata.map((parameter) => parameter.name);
   if (isDocumentedValueEntry(entry)) {
     return {
       name,
@@ -2402,21 +2542,84 @@ function documentedCallableInfo(name, data) {
     };
   }
 
-  const returnType = inferReturnFromEntry(entry);
+  const returnType = hardCodedReturnType(name) || inferReturnFromEntry(entry);
+  const parameterTypes = documentedParameterTypes(entry, signatureMetadata, declarationInfo);
   return {
     name,
     scope: "documented global",
-    type: functionType(signatureParameters(entry.signature), returnType, {
+    type: functionType(signatureNames, returnType, {
       label: `${entry.kind || "documented"} ${name}`,
       signatures: entries.map((candidate) => candidate.signature).filter(Boolean),
       documentation: returnSummary(entry),
-      parameterTypes: declarationInfo && declarationInfo.type && declarationInfo.type.parameterTypes,
+      parameterTypes,
+      parameterMetadata: signatureMetadata,
       declarations: declarationInfo && declarationInfo.type && declarationInfo.type.declarations
     }),
     returnType,
     source: "GAP reference manual",
     documentation: returnSummary(entry)
   };
+}
+
+function hardCodedReturnType(name) {
+  const factory = HARD_CODED_CALLS[name];
+  return factory ? factory() : undefined;
+}
+
+function documentedParameterTypes(entry, signatureMetadata, declarationInfo) {
+  const declarationTypes = declarationInfo && declarationInfo.type && declarationInfo.type.parameterTypes;
+  if (signatureMetadata.length === 0) {
+    return declarationTypes || [];
+  }
+
+  const documentationTypes = inferParameterTypesFromEntry(entry, signatureMetadata);
+  const alignedDeclarationTypes = alignDeclarationParameterTypes(signatureMetadata, declarationTypes || []);
+  return signatureMetadata.map((_, index) =>
+    mergeParameterTypeHints(documentationTypes[index], alignedDeclarationTypes[index])
+  );
+}
+
+function alignDeclarationParameterTypes(signatureMetadata, declarationTypes) {
+  if (!Array.isArray(declarationTypes) || declarationTypes.length === 0) {
+    return [];
+  }
+  if (signatureMetadata.length === 0 || signatureMetadata.length === declarationTypes.length) {
+    return declarationTypes;
+  }
+
+  const result = new Array(signatureMetadata.length);
+  let declarationIndex = 0;
+  for (let index = 0; index < signatureMetadata.length && declarationIndex < declarationTypes.length; index += 1) {
+    const parameter = signatureMetadata[index];
+    const remainingSignatureParameters = signatureMetadata.length - index;
+    const remainingDeclarationTypes = declarationTypes.length - declarationIndex;
+    if (
+      parameter.optional
+      && isFilterParameterName(parameter.name)
+      && remainingSignatureParameters > remainingDeclarationTypes
+    ) {
+      continue;
+    }
+    result[index] = declarationTypes[declarationIndex];
+    declarationIndex += 1;
+  }
+  return result;
+}
+
+function mergeParameterTypeHints(documentationType, declarationType) {
+  if (!documentationType) {
+    return declarationType;
+  }
+  if (!declarationType) {
+    return documentationType;
+  }
+
+  const label = isGenericTypeLabel(documentationType.label) ? declarationType.label : documentationType.label;
+  return typeInfo(label, [...(documentationType.filters || []), ...(declarationType.filters || [])], {
+    confidence: "documentation/declaration",
+    element: documentationType.element || declarationType.element,
+    fields: documentationType.fields || declarationType.fields
+  });
 }
 
 function isDocumentedValueEntry(entry) {
@@ -2531,12 +2734,94 @@ function inferValueFromEntry(entry) {
   return explicitType || typeInfo("GAP object", ["IsObject"], { confidence: "documentation" });
 }
 
+function inferParameterTypesFromEntry(entry, signatureMetadata) {
+  if (!Array.isArray(signatureMetadata) || signatureMetadata.length === 0) {
+    return [];
+  }
+
+  const text = normalizeDocumentationText(returnSummary(entry));
+  return signatureMetadata.map((parameter) => inferParameterTypeFromDocumentation(parameter.name, text, parameter));
+}
+
+function inferParameterTypeFromDocumentation(name, text, parameter) {
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName || normalizedName === "...") {
+    return typeInfo("GAP object", ["IsObject"], { confidence: "signature" });
+  }
+  if (isFilterParameterName(normalizedName)) {
+    return typeInfo("filter", ["IsObject", "IsFunction"], { confidence: "signature" });
+  }
+
+  const escapedName = escapeRegExp(normalizedName);
+  if (parameterTextMatches(text, escapedName, [
+    `(?:list|lists|collection|set)\\s+of\\s+(?:non-?negative\\s+|positive\\s+)?integers?\\s+${escapedName}\\b`,
+    `${escapedName}\\s+(?:must|should)\\s+be\\s+(?:a\\s+)?list\\s+of\\s+(?:non-?negative\\s+|positive\\s+)?integers?`,
+    `${escapedName}\\s+(?:is|are)\\s+(?:a\\s+)?list\\s+of\\s+(?:non-?negative\\s+|positive\\s+)?integers?`
+  ]) || /^(?:ints|integers|exponents|orders)$/i.test(normalizedName)) {
+    return listParameterType(integerParameterType("documentation parameter"), "documentation parameter");
+  }
+
+  if (parameterTextMatches(text, escapedName, [
+    `(?:group|subgroup)\\s+${escapedName}\\b`,
+    `${escapedName}\\s+(?:is|are|must\\s+be|should\\s+be)\\s+(?:a\\s+|an\\s+|the\\s+)?(?:group|subgroup)\\b`
+  ])) {
+    return typeInfo("group", ["IsObject", "IsCollection", "IsMagma", "IsMagmaWithInverses", "IsGroup"], {
+      confidence: "documentation parameter"
+    });
+  }
+
+  if (parameterTextMatches(text, escapedName, [
+    `(?:integer|number|degree|rank|length|size|index|dimension|position)\\s+${escapedName}\\b`,
+    `${escapedName}\\s+(?:is|are|must\\s+be|should\\s+be)\\s+(?:a\\s+|an\\s+)?(?:integer|number|degree|rank|length|size|index|dimension|position)\\b`
+  ]) || /^(?:deg|degree|rank|n|nr|num|number|len|length|pos|position|dim|dimension|count|i|j|k)$/i.test(normalizedName)) {
+    return integerParameterType("documentation parameter");
+  }
+
+  if (/^(?:listorcoll|listorcollection|coll|collection)$/i.test(normalizedName)) {
+    return typeInfo("list or collection", ["IsObject", "IsCollection", "IsListOrCollection"], {
+      confidence: "signature"
+    });
+  }
+
+  if (parameterTextMatches(text, escapedName, [
+    `(?:list|lists|collection|set)\\s+${escapedName}\\b`,
+    `${escapedName}\\s+(?:is|are|must\\s+be|should\\s+be)\\s+(?:a\\s+)?(?:list|collection|set)\\b`
+  ]) || /^(?:list|lists|gens|generators|elems|elements|names)$/i.test(normalizedName)) {
+    const element = /^(?:gens|generators|elems|elements)$/i.test(normalizedName)
+      ? typeInfo("group element", ["IsObject", "IsMultiplicativeElementWithInverse"], { confidence: "documentation parameter" })
+      : undefined;
+    return listParameterType(element, "documentation parameter");
+  }
+
+  if (/^(?:name|label|string)$/i.test(normalizedName)) {
+    return typeInfo("string", ["IsObject", "IsString", "IsList"], { confidence: "signature" });
+  }
+  if (/^(?:func|fun|function|map|mapper|act|adj|predicate)$/i.test(normalizedName)) {
+    return typeInfo("function", ["IsObject", "IsFunction"], { confidence: "signature" });
+  }
+
+  return typeInfo("GAP object", ["IsObject"], { confidence: "signature" });
+}
+
+function parameterTextMatches(text, escapedName, patterns) {
+  return patterns.some((pattern) => new RegExp(pattern, "i").test(text));
+}
+
+function integerParameterType(confidence) {
+  return typeInfo("integer", ["IsObject", "IsInt"], { confidence });
+}
+
+function listParameterType(element, confidence) {
+  return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence, element });
+}
+
 function explicitReturnText(text, name) {
   const normalized = normalizeDocumentationText(text);
   const namePattern = name ? escapeRegExp(name) : "[A-Za-z_][A-Za-z0-9_]*";
   const patterns = [
     new RegExp(`(?:^|[.!?]\\s+)(?:this\\s+(?:function|operation|attribute|method)\\s+)?${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
     new RegExp(`\\b${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
+    new RegExp(`\\b${namePattern}\\s*\\([^)]*\\)\\s+(?:is|are)\\s+([^.!?]+)`, "i"),
     /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?:?\s+([^.!?]+)/i,
     /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?\s+([^.!?]+)/i,
     /^is\s+([^.!?]+)/i
@@ -2592,15 +2877,15 @@ function inferTypeFromDocumentationClause(clause, confidence) {
   if (isListReturnClause(text)) {
     return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence });
   }
-  if (isIntegerReturnClause(text)) {
-    return typeInfo("integer", ["IsObject", "IsInt"], { confidence });
-  }
   if (isGroupReturnClause(text)) {
     const filters = ["IsObject", "IsCollection", "IsMagma", "IsGroup"];
     if (/\b(permutation|symmetric|alternating)\b/.test(text)) {
       filters.push("IsPermGroup");
     }
     return typeInfo("group", filters, { confidence });
+  }
+  if (isIntegerReturnClause(text)) {
+    return typeInfo("integer", ["IsObject", "IsInt"], { confidence });
   }
 
   return undefined;
@@ -2714,6 +2999,14 @@ function findMatchingParen(masked, openIndex) {
 }
 
 function signatureParameters(signature) {
+  return signatureParameterMetadata(signature).map((parameter) => parameter.name);
+}
+
+function expandOptionalSignatureSegments(parametersText) {
+  return signatureParameterMetadata(`f(${parametersText})`).map((parameter) => parameter.name).join(",");
+}
+
+function signatureParameterMetadata(signature) {
   if (!signature) {
     return [];
   }
@@ -2722,15 +3015,45 @@ function signatureParameters(signature) {
     return [];
   }
 
-  return splitCommaList(expandOptionalSignatureSegments(match[1]))
-    .map((param) => param.trim())
-    .filter(Boolean);
+  const parameters = [];
+  let current = "";
+  let optionalDepth = 0;
+  let currentOptional = false;
+
+  function pushCurrent() {
+    const name = current.trim();
+    if (name) {
+      parameters.push({ name, optional: currentOptional });
+    }
+    current = "";
+    currentOptional = false;
+  }
+
+  for (const char of match[1]) {
+    if (char === "[") {
+      optionalDepth += 1;
+      continue;
+    }
+    if (char === "]") {
+      optionalDepth = Math.max(0, optionalDepth - 1);
+      continue;
+    }
+    if (char === ",") {
+      pushCurrent();
+      continue;
+    }
+    current += char;
+    if (optionalDepth > 0 && !/\s/.test(char)) {
+      currentOptional = true;
+    }
+  }
+  pushCurrent();
+
+  return parameters;
 }
 
-function expandOptionalSignatureSegments(parametersText) {
-  return parametersText
-    .replace(/\[([^\]]*)\]/g, "$1")
-    .replace(/,{2,}/g, ",");
+function isFilterParameterName(name) {
+  return /^(?:w?filt|filters?|category|cat)$/i.test(String(name || "").trim());
 }
 
 function functionType(parameters, returnType, options = {}) {
@@ -2741,6 +3064,7 @@ function functionType(parameters, returnType, options = {}) {
     signatures: options.signatures,
     documentation: options.documentation,
     parameterTypes: options.parameterTypes,
+    parameterMetadata: options.parameterMetadata,
     declarations: options.declarations,
     observedFilters: options.observedFilters
   });
@@ -2759,6 +3083,7 @@ function typeInfo(label, filters = [], options = {}) {
     signatures: options.signatures || [],
     documentation: options.documentation,
     parameterTypes: options.parameterTypes || [],
+    parameterMetadata: options.parameterMetadata || [],
     declarations: options.declarations || [],
     confidence: options.confidence || "inferred",
     source: options.source
@@ -2775,6 +3100,7 @@ function cloneType(type) {
     filters: [...(type.filters || [])],
     observedFilters: [...(type.observedFilters || [])],
     parameters: [...(type.parameters || [])],
+    parameterMetadata: [...(type.parameterMetadata || [])],
     fields: type.fields ? { ...type.fields } : undefined,
     signatures: [...(type.signatures || [])]
   };
