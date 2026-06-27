@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.22
+
+- Fixed documented `Gcd` inference so the list-argument overload does not imply a list return.
+- Displayed generic `Gcd` hovers as returning a single ring element.
+- Inferred integer results for statically numeric `Gcd` calls such as `Gcd([10, 15])`, `Gcd(10, 15)`, and `Gcd(Integers, [10, 15])`.
+
 ## 0.3.21
 
 - Extended generated hover documentation to installed GAP package manuals.

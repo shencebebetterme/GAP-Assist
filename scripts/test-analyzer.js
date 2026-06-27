@@ -108,6 +108,27 @@ assert(!builtinMarkdown.includes("Source:"), "static hover should not include in
 assert(!builtinMarkdown.includes("Documentation return hint"), "static hover should not include documentation return hints");
 assert(!builtinMarkdown.includes("Confidence:"), "static hover should not include confidence lines");
 
+const hoverGcd = analyzer.hoverAt("d := Gcd([10, 15]);", 0, 6);
+assert(hoverGcd && hoverGcd.symbol.name === "Gcd", "hover at Gcd should resolve the documented function");
+assert(!hoverGcd.symbol.returnType.filters.includes("IsList"), "documented Gcd should not infer a list return");
+assert(hoverGcd.symbol.returnType.filters.includes("IsRingElement"), "documented Gcd should infer a single ring element");
+const gcdMarkdown = formatInferenceMarkdown(hoverGcd);
+assert(gcdMarkdown.includes("<strong>ring element</strong>"), "Gcd hover should show a single ring element return");
+assert(!gcdMarkdown.includes("-> <code style=\"color: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-textLink-foreground)); font-weight: 600;\"><strong>list</strong></code>"), "Gcd signature should not show a list return");
+
+const gcdCallSample = [
+  "d := Gcd([10, 15]);",
+  "e := Gcd(10, 15);",
+  "f := Gcd(Integers, [10, 15]);",
+  ""
+].join("\n");
+const gcdCallAnalysis = analyzer.analyze(gcdCallSample, "memory://gcd.g");
+const gcdScope = gcdCallAnalysis.scopes[0];
+for (const name of ["d", "e", "f"]) {
+  const symbol = gcdScope.symbols.get(name);
+  assert(symbol && symbol.type.filters.includes("IsInt"), `${name} should infer an integer Gcd result`);
+}
+
 const hoverString = analyzer.hoverAt('str := "hello";', 0, 1);
 const stringMarkdown = formatInferenceMarkdown(hoverString);
 assert(hoverString.symbol.type.filters.includes("IsString"), "hover at a string assignment should infer IsString");

@@ -30,6 +30,10 @@ const HARD_CODED_CALLS = {
   SymmetricGroup: callType("symmetric permutation group", ["IsObject", "IsCollection", "IsMagma", "IsGroup", "IsPermGroup", "IsFinite"], "constructor")
 };
 
+const DOCUMENTED_RETURN_OVERRIDES = {
+  Gcd: () => typeInfo("ring element", ["IsObject", "IsRingElement"], { confidence: "documentation override" })
+};
+
 class GapAnalyzer {
   constructor(docs, declarations) {
     this.docs = docs || { entries: {}, names: [] };
@@ -751,6 +755,9 @@ function labelFromFilters(filters, fallback) {
   }
   if (filters.includes("IsMagmaWithInverses")) {
     return "group";
+  }
+  if (filters.includes("IsRingElement") || filters.includes("IsScalar")) {
+    return "ring element";
   }
   if (filters.includes("IsPerm")) {
     return "permutation";
@@ -1918,6 +1925,10 @@ function inferCall(name, args, scope, data, expressionOffset = 0, argumentSpans 
     return inferCollectionMaterializationCall(name, args, scope, data, expressionOffset, argumentSpans);
   }
 
+  if (name === "Gcd") {
+    return inferGcdCall(args, scope, data, expressionOffset, argumentSpans);
+  }
+
   if (hardCoded) {
     return addCallContext(hardCoded(), name, args, scope);
   }
@@ -2008,6 +2019,71 @@ function inferCollectionMaterializationCall(name, args, scope, data, expressionO
     element,
     arguments: callArguments(args, scope)
   });
+}
+
+function inferGcdCall(args, scope, data, expressionOffset, argumentSpans) {
+  const argumentTypes = args.map((arg, index) => {
+    const span = argumentSpans[index] || { start: 0 };
+    return inferExpression(arg, scope, data, expressionOffset + span.start);
+  });
+  const valueTypes = gcdValueTypes(argumentTypes);
+  const numericType = numericGcdReturnType(valueTypes);
+  if (numericType) {
+    numericType.source = "Gcd(...)";
+    numericType.arguments = callArguments(args, scope);
+    return numericType;
+  }
+
+  return typeInfo("ring element", ["IsObject", "IsRingElement"], {
+    confidence: "Gcd arguments",
+    source: "Gcd(...)",
+    arguments: callArguments(args, scope)
+  });
+}
+
+function gcdValueTypes(argumentTypes) {
+  const valueTypes = [];
+
+  for (let index = 0; index < argumentTypes.length; index += 1) {
+    const argumentType = argumentTypes[index];
+    const valueType = (argumentType && argumentType.element) || argumentType;
+
+    if (
+      index === 0 &&
+      argumentTypes.length > 1 &&
+      valueType &&
+      !isNumericType(valueType) &&
+      !hasAnyFilter(valueType, ["IsRingElement", "IsScalar"])
+    ) {
+      continue;
+    }
+
+    if (valueType) {
+      valueTypes.push(valueType);
+    }
+  }
+
+  return valueTypes;
+}
+
+function numericGcdReturnType(valueTypes) {
+  if (valueTypes.length === 0 || valueTypes.some(isUnknownType)) {
+    return undefined;
+  }
+
+  if (valueTypes.every((type) => hasAnyFilter(type, ["IsInt", "IsPosInt", "IsNonnegativeInt"]))) {
+    return typeInfo("integer", ["IsObject", "IsInt"], { confidence: "Gcd arguments" });
+  }
+
+  if (valueTypes.every(isNumericType)) {
+    return typeInfo("number", ["IsObject", "IsRat"], { confidence: "Gcd arguments" });
+  }
+
+  return undefined;
+}
+
+function isUnknownType(type) {
+  return !type || type.confidence === "unknown" || /^unknown\b/.test(type.label || "");
 }
 
 function inferArrowCallback(argumentText, mapper, firstParameterType, scope, data, expressionOffset, mapperSpan, parameterSource) {
@@ -2400,9 +2476,13 @@ function returnTypeFromDeclaration(declaration) {
 function inferReturnFromEntry(entry) {
   const kind = (entry.kind || "").toLowerCase();
   const text = returnSummary(entry).toLowerCase();
+  const override = DOCUMENTED_RETURN_OVERRIDES[entry.name || ""];
 
   if (kind === "property" || kind === "category" || /^is[A-Z]/.test(entry.name || "")) {
     return typeInfo("boolean", ["IsObject", "IsBool"], { confidence: "documentation kind" });
+  }
+  if (override) {
+    return override(entry);
   }
   if (kind === "attribute" && /^generators/i.test(entry.name || "")) {
     return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence: "documentation name" });
