@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.23
+
+- Reworked documentation-derived return inference to use explicit return/value clauses instead of scanning whole prose blocks.
+- Fixed false list/group/integer returns caused by incidental argument prose such as list inputs, subgroup descriptions, and generator counts.
+- Rendered documented GAP/package variables as values instead of system functions.
+- Split optional signature parameter groups such as `Gcd([R,]r1,r2,...)` and `Digraph([filt,]obj[,source,range])` into separate hover parameters.
+
 ## 0.3.22
 
 - Fixed documented `Gcd` inference so the list-argument overload does not imply a list return.

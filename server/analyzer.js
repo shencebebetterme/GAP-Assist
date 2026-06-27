@@ -2392,6 +2392,16 @@ function documentedCallableInfo(name, data) {
   }
 
   const entry = entries[0];
+  if (isDocumentedValueEntry(entry)) {
+    return {
+      name,
+      scope: "documented global",
+      type: inferValueFromEntry(entry),
+      source: "GAP reference manual",
+      documentation: returnSummary(entry)
+    };
+  }
+
   const returnType = inferReturnFromEntry(entry);
   return {
     name,
@@ -2407,6 +2417,17 @@ function documentedCallableInfo(name, data) {
     source: "GAP reference manual",
     documentation: returnSummary(entry)
   };
+}
+
+function isDocumentedValueEntry(entry) {
+  const kind = (entry.kind || "").toLowerCase();
+  if (kind === "variable" || kind === "global variable") {
+    return true;
+  }
+  if (kind === "property" || kind === "category" || kind === "filter") {
+    return false;
+  }
+  return Boolean(entry.signature && !entry.signature.includes("("));
 }
 
 function declarationCallableInfo(name, declarations) {
@@ -2475,7 +2496,7 @@ function returnTypeFromDeclaration(declaration) {
 
 function inferReturnFromEntry(entry) {
   const kind = (entry.kind || "").toLowerCase();
-  const text = returnSummary(entry).toLowerCase();
+  const text = returnSummary(entry);
   const override = DOCUMENTED_RETURN_OVERRIDES[entry.name || ""];
 
   if (kind === "property" || kind === "category" || /^is[A-Z]/.test(entry.name || "")) {
@@ -2487,27 +2508,134 @@ function inferReturnFromEntry(entry) {
   if (kind === "attribute" && /^generators/i.test(entry.name || "")) {
     return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence: "documentation name" });
   }
-  if (/\b(list|lists|generators)\b/.test(text)) {
-    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence: "documentation prose" });
+
+  const returnText = explicitReturnText(text, entry.name);
+  const explicitType = returnText && inferTypeFromDocumentationClause(returnText, "documentation return");
+  if (explicitType) {
+    return explicitType;
   }
-  if (/\b(group|subgroup|coset)\b/.test(text)) {
+
+  const constructorText = constructorReturnText(text);
+  const constructorType = constructorText && inferTypeFromDocumentationClause(constructorText, "documentation constructor");
+  if (constructorType) {
+    return constructorType;
+  }
+
+  return typeInfo("GAP object", ["IsObject"], { confidence: "documentation" });
+}
+
+function inferValueFromEntry(entry) {
+  const text = returnSummary(entry);
+  const valueText = valueDescriptionText(text);
+  const explicitType = valueText && inferTypeFromDocumentationClause(valueText, "documentation value");
+  return explicitType || typeInfo("GAP object", ["IsObject"], { confidence: "documentation" });
+}
+
+function explicitReturnText(text, name) {
+  const normalized = normalizeDocumentationText(text);
+  const namePattern = name ? escapeRegExp(name) : "[A-Za-z_][A-Za-z0-9_]*";
+  const patterns = [
+    new RegExp(`(?:^|[.!?]\\s+)(?:this\\s+(?:function|operation|attribute|method)\\s+)?${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
+    new RegExp(`\\b${namePattern}\\s+returns?\\s+([^.!?]+)`, "i"),
+    /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?:?\s+([^.!?]+)/i,
+    /(?:^|[.!?]\s+)(?:this\s+(?:function|operation|attribute|method)\s+)?returns?\s+([^.!?]+)/i,
+    /^is\s+([^.!?]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(normalized);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  return "";
+}
+
+function constructorReturnText(text) {
+  const normalized = normalizeDocumentationText(text);
+  const match = /^(?:constructs?|creates?|builds?|forms?|computes?)\s+([^.!?]+)/i.exec(normalized);
+  return match ? match[1].trim() : "";
+}
+
+function valueDescriptionText(text) {
+  const normalized = normalizeDocumentationText(text);
+  const pronounMatch = /^(?:this|these)\s+(?:is|are)\s+([^.!?]+)/i.exec(normalized);
+  if (pronounMatch) {
+    return pronounMatch[1].trim();
+  }
+
+  const match = /^(?:[A-Za-z_][A-Za-z0-9_]*\s+)?(?:is|are)\s+([^.!?]+)/i.exec(normalized);
+  return match ? match[1].trim() : normalized.split(/[.!?]/)[0].trim();
+}
+
+function inferTypeFromDocumentationClause(clause, confidence) {
+  const text = clause.toLowerCase();
+
+  if (/\b(true|false|boolean|bool)\b/.test(text)) {
+    return typeInfo("boolean", ["IsObject", "IsBool"], { confidence });
+  }
+  if (/\b(function)\b/.test(text)) {
+    return typeInfo("function", ["IsObject", "IsFunction"], { confidence });
+  }
+  if (/\b(record|rec)\b/.test(text)) {
+    return typeInfo("record", ["IsObject", "IsRecord"], { confidence });
+  }
+  if (/\b(greatest common divisor|gcd|standard associate|ring element|scalar|element of (?:a |the )?group ring)\b/.test(text)) {
+    return typeInfo("ring element", ["IsObject", "IsRingElement"], { confidence });
+  }
+  if (/\bgroup element\b/.test(text)) {
+    return typeInfo("group element", ["IsObject", "IsMultiplicativeElementWithInverse"], { confidence });
+  }
+  if (/\b(string|character)\b/.test(text)) {
+    return typeInfo("string", ["IsObject", "IsString", "IsList"], { confidence });
+  }
+  if (isListReturnClause(text)) {
+    return typeInfo("list", ["IsObject", "IsCollection", "IsList"], { confidence });
+  }
+  if (isIntegerReturnClause(text)) {
+    return typeInfo("integer", ["IsObject", "IsInt"], { confidence });
+  }
+  if (isGroupReturnClause(text)) {
     const filters = ["IsObject", "IsCollection", "IsMagma", "IsGroup"];
     if (/\b(permutation|symmetric|alternating)\b/.test(text)) {
       filters.push("IsPermGroup");
     }
-    return typeInfo("group", filters, { confidence: "documentation prose" });
-  }
-  if (/\b(integer|number|length|size)\b/.test(text)) {
-    return typeInfo("integer", ["IsObject", "IsInt"], { confidence: "documentation prose" });
-  }
-  if (/\b(string|character)\b/.test(text)) {
-    return typeInfo("string", ["IsObject", "IsString", "IsList"], { confidence: "documentation prose" });
-  }
-  if (/\b(function)\b/.test(text)) {
-    return typeInfo("function", ["IsObject", "IsFunction"], { confidence: "documentation prose" });
+    return typeInfo("group", filters, { confidence });
   }
 
-  return typeInfo("GAP object", ["IsObject"], { confidence: "documentation" });
+  return undefined;
+}
+
+function isListReturnClause(text) {
+  if (!/\b(list|lists|collection|set)\b/.test(text)) {
+    return false;
+  }
+  if (/^(?:an?|the)?\s*(?:length|size|number|order|index|rank|degree|dimension|position|count)\b/.test(text)) {
+    return false;
+  }
+  if (/^(?:an?|the)?\s*group\b/.test(text)) {
+    return false;
+  }
+  return true;
+}
+
+function isIntegerReturnClause(text) {
+  return /\b(integer|positive integer|nonnegative integer|number of|length of|size of|order of|index|rank|degree|dimension|position|count)\b/.test(text);
+}
+
+function isGroupReturnClause(text) {
+  if (/\b(?:element of (?:a |the )?group|group element|group ring)\b/.test(text)) {
+    return false;
+  }
+  return /^(?:an?|the|a new|new)?\s*(?:[a-z0-9_-]+,?\s+){0,6}(?:group|subgroup|coset)\b/.test(text);
+}
+
+function normalizeDocumentationText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(text) {
+  return String(text).replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 function returnSummary(entry) {
@@ -2590,7 +2718,19 @@ function signatureParameters(signature) {
     return [];
   }
   const match = /^[^(]+\(([\s\S]*)\)$/.exec(signature);
-  return match ? splitCommaList(match[1]).map((param) => param.replace(/[\[\]]/g, "").trim()).filter(Boolean) : [];
+  if (!match) {
+    return [];
+  }
+
+  return splitCommaList(expandOptionalSignatureSegments(match[1]))
+    .map((param) => param.trim())
+    .filter(Boolean);
+}
+
+function expandOptionalSignatureSegments(parametersText) {
+  return parametersText
+    .replace(/\[([^\]]*)\]/g, "$1")
+    .replace(/,{2,}/g, ",");
 }
 
 function functionType(parameters, returnType, options = {}) {

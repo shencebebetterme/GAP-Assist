@@ -115,6 +115,16 @@ assert(hoverGcd.symbol.returnType.filters.includes("IsRingElement"), "documented
 const gcdMarkdown = formatInferenceMarkdown(hoverGcd);
 assert(gcdMarkdown.includes("<strong>ring element</strong>"), "Gcd hover should show a single ring element return");
 assert(!gcdMarkdown.includes("-> <code style=\"color: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-textLink-foreground)); font-weight: 600;\"><strong>list</strong></code>"), "Gcd signature should not show a list return");
+assert(gcdMarkdown.includes("<code>R</code>"), "optional signature parameters should split the optional ring parameter");
+assert(gcdMarkdown.includes("<code>r1</code>"), "optional signature parameters should keep the first required value parameter separate");
+assert(!gcdMarkdown.includes("<code>R,r1</code>"), "optional signature parameters should not merge comma-separated names");
+
+const hoverDigraph = analyzer.hoverAt("Digraph([1, 2]);", 0, 1);
+const digraphMarkdown = formatInferenceMarkdown(hoverDigraph);
+assert(digraphMarkdown.includes("<code>filt</code>"), "package signatures should split optional leading parameters");
+assert(digraphMarkdown.includes("<code>obj</code>"), "package signatures should keep required parameters separate after optional groups");
+assert(digraphMarkdown.includes("<code>source</code>"), "package signatures should split optional trailing parameters");
+assert(digraphMarkdown.includes("<code>range</code>"), "package signatures should split optional trailing parameter groups");
 
 const gcdCallSample = [
   "d := Gcd([10, 15]);",
@@ -128,6 +138,35 @@ for (const name of ["d", "e", "f"]) {
   const symbol = gcdScope.symbols.get(name);
   assert(symbol && symbol.type.filters.includes("IsInt"), `${name} should infer an integer Gcd result`);
 }
+
+const hoverPermutable = analyzer.hoverAt("ArePermutableSubgroups(G, U, V);", 0, 2);
+assert(hoverPermutable.symbol.returnType.filters.includes("IsBool"), "functions returning true/false should infer boolean");
+assert(!hoverPermutable.symbol.returnType.filters.includes("IsGroup"), "boolean subgroup predicates should not infer group returns from argument prose");
+
+const hoverIndex = analyzer.hoverAt("Index(G, U);", 0, 1);
+assert(hoverIndex.symbol.returnType.filters.includes("IsInt"), "Index should infer an integer return from its named return clause");
+assert(!hoverIndex.symbol.returnType.filters.includes("IsGroup"), "Index should not infer a group return from subgroup argument prose");
+
+const hoverLength = analyzer.hoverAt("Length([1, 2]);", 0, 1);
+assert(hoverLength.symbol.returnType.filters.includes("IsInt"), "Length should infer an integer return");
+assert(!hoverLength.symbol.returnType.filters.includes("IsList"), "Length should not infer a list return from its list argument");
+
+const hoverAdd = analyzer.hoverAt("Add(list, obj);", 0, 1);
+assert(!hoverAdd.symbol.returnType.filters.includes("IsList"), "mutators such as Add should not infer list returns from list arguments");
+
+const hoverAbelianGroup = analyzer.hoverAt("AbelianGroup([2, 3]);", 0, 1);
+assert(hoverAbelianGroup.symbol.returnType.filters.includes("IsGroup"), "constructors mentioning list arguments should still infer constructed groups");
+assert(!hoverAbelianGroup.symbol.returnType.filters.includes("IsList"), "AbelianGroup should not infer a list return from its ints list argument");
+
+const hoverAllPrimes = analyzer.hoverAt("AllPrimes;", 0, 1);
+assert(hoverAllPrimes && !hoverAllPrimes.symbol.returnType, "documented variables should not be modeled as functions");
+assert(hoverAllPrimes.symbol.type.filters.includes("IsList"), "documented set/list variables should infer collection-like values");
+assert(!hoverAllPrimes.symbol.type.filters.includes("IsGroup"), "documented variables should not infer groups from incidental prose");
+const hoverZugadi = analyzer.hoverAt("ZugadiSpinalGroup;", 0, 1);
+assert(hoverZugadi && !hoverZugadi.symbol.returnType, "documented global variables should render as values even when group-like");
+assert(hoverZugadi.symbol.type.filters.includes("IsGroup"), "documented variables described as groups should infer group-like values");
+const hoverBabyAleshin = analyzer.hoverAt("BabyAleshinGroup;", 0, 1);
+assert(!hoverBabyAleshin.symbol.type.filters.includes("IsList"), "incidental generator counts should not make documented variables list-like");
 
 const hoverString = analyzer.hoverAt('str := "hello";', 0, 1);
 const stringMarkdown = formatInferenceMarkdown(hoverString);
