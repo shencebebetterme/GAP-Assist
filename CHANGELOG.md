@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.29
+
+- Registered the GAP debug adapter from the extension activation path so `GAP: Debug Current File` can start the adapter reliably.
+- Added a GAP debug configuration provider and a `GAP Debugger` output channel for startup diagnostics.
+
 ## 0.3.28
 
 - Passed current-file breakpoints directly when running `GAP: Debug Current File`, making command-launched sessions stop reliably.

@@ -12,6 +12,7 @@ const GAP_SELECTOR = { language: "gap" };
 const IDENTIFIER_PATTERN = /[A-Za-z_][A-Za-z0-9_]*/;
 const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend(["function"], []);
 let activeLanguageServerClient;
+let activeDebugOutputChannel;
 
 function activate(context) {
   let docs;
@@ -26,6 +27,8 @@ function activate(context) {
 
   const analyzer = new GapAnalyzer(docs, declarations);
   const diagnosticCollection = vscode.languages.createDiagnosticCollection("gap");
+  const debugOutputChannel = vscode.window.createOutputChannel("GAP Debugger");
+  activeDebugOutputChannel = debugOutputChannel;
   const languageServerClient = new GapLanguageServerClient(path.join(context.extensionPath, "server", "lsp-server.js"), {
     cwd: context.extensionPath,
     timeoutMs: 1000
@@ -35,7 +38,13 @@ function activate(context) {
 
   context.subscriptions.push(
     diagnosticCollection,
+    debugOutputChannel,
     { dispose: () => languageServerClient.dispose() },
+    vscode.debug.registerDebugAdapterDescriptorFactory(
+      "gap",
+      new GapDebugAdapterDescriptorFactory(context.extensionPath, debugOutputChannel)
+    ),
+    vscode.debug.registerDebugConfigurationProvider("gap", new GapDebugConfigurationProvider()),
     vscode.languages.registerHoverProvider(GAP_SELECTOR, new GapHoverProvider(docs, analyzer, languageServerClient)),
     vscode.languages.registerDocumentSemanticTokensProvider(
       GAP_SELECTOR,
@@ -46,7 +55,7 @@ function activate(context) {
     vscode.workspace.onDidChangeTextDocument((event) => updateGapDiagnostics(event.document, analyzer, diagnosticCollection)),
     vscode.workspace.onDidCloseTextDocument((document) => diagnosticCollection.delete(document.uri)),
     vscode.commands.registerCommand("gapReference.openLocalManual", (target) => openLocalManual(context, docs, target)),
-    vscode.commands.registerCommand("gapReference.debugCurrentFile", (resource) => debugCurrentFile(resource))
+    vscode.commands.registerCommand("gapReference.debugCurrentFile", (resource) => debugCurrentFile(resource, debugOutputChannel))
   );
 
   for (const document of vscode.workspace.textDocuments || []) {
@@ -484,7 +493,45 @@ async function openLocalManual(context, docs, target) {
   await vscode.env.openExternal(uri);
 }
 
-async function debugCurrentFile(resource) {
+class GapDebugAdapterDescriptorFactory {
+  constructor(extensionPath, outputChannel) {
+    this.extensionPath = extensionPath;
+    this.outputChannel = outputChannel;
+  }
+
+  createDebugAdapterDescriptor() {
+    const adapterPath = path.join(this.extensionPath, "debug", "gapDebugAdapter.js");
+    this.outputChannel.appendLine(`Using GAP debug adapter: ${adapterPath}`);
+    return new vscode.DebugAdapterExecutable(process.execPath, [adapterPath], {
+      cwd: this.extensionPath,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1"
+      }
+    });
+  }
+}
+
+class GapDebugConfigurationProvider {
+  resolveDebugConfiguration(_folder, config) {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!config.type) {
+      config.type = "gap";
+    }
+    if (!config.request) {
+      config.request = "launch";
+    }
+    if (!config.name) {
+      config.name = "Debug GAP File";
+    }
+    if (!config.program && activeEditor && activeEditor.document && activeEditor.document.languageId === "gap") {
+      config.program = activeEditor.document.uri.fsPath;
+    }
+    return config;
+  }
+}
+
+async function debugCurrentFile(resource, outputChannel = activeDebugOutputChannel) {
   const activeEditor = vscode.window.activeTextEditor;
   const uri = resource && resource.fsPath ? resource : (activeEditor && activeEditor.document && activeEditor.document.uri);
   if (!uri || !uri.fsPath) {
@@ -508,16 +555,35 @@ async function debugCurrentFile(resource) {
   }
 
   const breakpoints = currentFileBreakpoints(uri);
-  const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+  const configuration = {
     type: "gap",
     request: "launch",
     name: "Debug GAP File",
     program: uri.fsPath,
     breakpoints,
     stopOnEntry: false
-  });
-  if (!started) {
-    vscode.window.showWarningMessage("GAP debugger did not start. Check the Debug Console for details.");
+  };
+
+  if (outputChannel) {
+    outputChannel.appendLine(`Starting GAP debug session for ${uri.fsPath}`);
+    outputChannel.appendLine(`Captured ${breakpoints.length} breakpoint(s) for this file.`);
+  }
+
+  try {
+    const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), configuration);
+    if (!started) {
+      if (outputChannel) {
+        outputChannel.appendLine("VS Code returned false from debug.startDebugging before launching the adapter.");
+        outputChannel.show(true);
+      }
+      vscode.window.showWarningMessage("GAP debugger did not start. See the GAP Debugger output channel for details.");
+    }
+  } catch (error) {
+    if (outputChannel) {
+      outputChannel.appendLine(`GAP debugger failed to start: ${error.message}`);
+      outputChannel.show(true);
+    }
+    vscode.window.showErrorMessage(`GAP debugger failed to start: ${error.message}`);
   }
 }
 

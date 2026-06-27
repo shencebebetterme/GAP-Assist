@@ -65,6 +65,18 @@ function main() {
     if (!commands.includes("gapReference.debugCurrentFile")) {
       failures.push("package.json must contribute the GAP debug current file command");
     }
+    const activationEvents = Array.isArray(packageJson.activationEvents) ? packageJson.activationEvents : [];
+    if (!activationEvents.includes("onDebugResolve:gap")) {
+      failures.push("package.json must activate before resolving GAP debug configurations");
+    }
+    const gapDebugger = debuggers.find((debuggerContribution) => debuggerContribution.type === "gap");
+    const launchProperties = gapDebugger &&
+      gapDebugger.configurationAttributes &&
+      gapDebugger.configurationAttributes.launch &&
+      gapDebugger.configurationAttributes.launch.properties;
+    if (!launchProperties || !launchProperties.breakpoints) {
+      failures.push("GAP debugger launch schema must allow command-provided breakpoints");
+    }
   }
 
   if (languageConfiguration && !languageConfiguration.comments) {

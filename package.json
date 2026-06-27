@@ -2,7 +2,7 @@
   "name": "gap-reference-assistant",
   "displayName": "GAP Reference Assistant",
   "description": "Syntax highlighting, documented symbol highlighting, and hover reference text for GAP.",
-  "version": "0.3.28",
+  "version": "0.3.29",
   "publisher": "local-gap",
   "license": "GPL-2.0-or-later",
   "repository": {
@@ -25,7 +25,8 @@
   "activationEvents": [
     "onLanguage:gap",
     "onCommand:gapReference.openLocalManual",
-    "onCommand:gapReference.debugCurrentFile"
+    "onCommand:gapReference.debugCurrentFile",
+    "onDebugResolve:gap"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -119,6 +120,14 @@
                 "minimum": 200,
                 "maximum": 50000,
                 "description": "Maximum number of characters captured for each runtime value."
+              },
+              "breakpoints": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "default": [],
+                "description": "Internal breakpoint handoff used by GAP: Debug Current File."
               }
             }
           }

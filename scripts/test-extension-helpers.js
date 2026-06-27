@@ -31,6 +31,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
         }
       },
       Hover: class Hover {},
+      DebugAdapterExecutable: class DebugAdapterExecutable {},
       Uri: {
         file: (value) => ({ fsPath: value }),
         parse: (value) => ({ toString: () => value })
@@ -41,11 +42,24 @@ Module._load = function patchedLoad(request, parent, isMain) {
       env: {
         openExternal: async () => undefined
       },
+      debug: {
+        breakpoints: [],
+        registerDebugAdapterDescriptorFactory: () => ({ dispose() {} }),
+        registerDebugConfigurationProvider: () => ({ dispose() {} }),
+        startDebugging: async () => true
+      },
       languages: {
         registerDocumentSemanticTokensProvider: () => ({ dispose() {} }),
         registerHoverProvider: () => ({ dispose() {} })
       },
       window: {
+        createOutputChannel: () => ({
+          appendLine: () => undefined,
+          dispose: () => undefined,
+          show: () => undefined
+        }),
+        activeTextEditor: undefined,
+        showErrorMessage: () => undefined,
         showWarningMessage: () => undefined
       },
       workspace: {
