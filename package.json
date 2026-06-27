@@ -2,7 +2,7 @@
   "name": "gap-reference-assistant",
   "displayName": "GAP Reference Assistant",
   "description": "Syntax highlighting, documented symbol highlighting, and hover reference text for GAP.",
-  "version": "0.3.26",
+  "version": "0.3.27",
   "publisher": "local-gap",
   "license": "GPL-2.0-or-later",
   "repository": {
@@ -24,7 +24,8 @@
   ],
   "activationEvents": [
     "onLanguage:gap",
-    "onCommand:gapReference.openLocalManual"
+    "onCommand:gapReference.openLocalManual",
+    "onCommand:gapReference.debugCurrentFile"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -133,12 +134,38 @@
         ]
       }
     ],
+    "breakpoints": [
+      {
+        "language": "gap"
+      }
+    ],
     "commands": [
       {
         "command": "gapReference.openLocalManual",
         "title": "GAP: Open Local Reference Page"
+      },
+      {
+        "command": "gapReference.debugCurrentFile",
+        "title": "Debug Current File",
+        "category": "GAP"
       }
     ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "gapReference.debugCurrentFile",
+          "when": "resourceLangId == gap",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gapReference.debugCurrentFile",
+          "when": "resourceLangId == gap",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "GAP Reference Assistant",
       "properties": {

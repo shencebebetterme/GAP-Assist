@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.27
+
+- Enabled gutter breakpoints for GAP files through VS Code's breakpoint language contribution.
+- Added `GAP: Debug Current File` to the command palette, editor title run menu, and editor context menu.
+
 ## 0.3.26
 
 - Added an experimental VS Code debugger for GAP files.

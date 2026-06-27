@@ -53,6 +53,18 @@ function main() {
     if (!debuggers.some((debuggerContribution) => debuggerContribution.type === "gap" && debuggerContribution.program === "./debug/gapDebugAdapter.js")) {
       failures.push("package.json must contribute the GAP debug adapter");
     }
+    const breakpointLanguages = packageJson.contributes && Array.isArray(packageJson.contributes.breakpoints)
+      ? packageJson.contributes.breakpoints.map((breakpoint) => breakpoint.language)
+      : [];
+    if (!breakpointLanguages.includes("gap")) {
+      failures.push("package.json must enable breakpoints for the GAP language");
+    }
+    const commands = packageJson.contributes && Array.isArray(packageJson.contributes.commands)
+      ? packageJson.contributes.commands.map((command) => command.command)
+      : [];
+    if (!commands.includes("gapReference.debugCurrentFile")) {
+      failures.push("package.json must contribute the GAP debug current file command");
+    }
   }
 
   if (languageConfiguration && !languageConfiguration.comments) {

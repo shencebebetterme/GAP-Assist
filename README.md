@@ -104,7 +104,9 @@ Hover links open the exact local manual section anchor, for example `chap39.html
 
 ## Debug GAP Files
 
-Open a `.g` file and choose **Run and Debug: Debug GAP File**, or create a launch configuration:
+Open a `.g` file, set breakpoints in the editor gutter, and run **GAP: Debug Current File** from the command palette, the editor title run menu, or the editor context menu.
+
+You can also use the Run and Debug view with this launch configuration:
 
 ```json
 {

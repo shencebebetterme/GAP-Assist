@@ -45,7 +45,8 @@ function activate(context) {
     vscode.workspace.onDidOpenTextDocument((document) => updateGapDiagnostics(document, analyzer, diagnosticCollection)),
     vscode.workspace.onDidChangeTextDocument((event) => updateGapDiagnostics(event.document, analyzer, diagnosticCollection)),
     vscode.workspace.onDidCloseTextDocument((document) => diagnosticCollection.delete(document.uri)),
-    vscode.commands.registerCommand("gapReference.openLocalManual", (target) => openLocalManual(context, docs, target))
+    vscode.commands.registerCommand("gapReference.openLocalManual", (target) => openLocalManual(context, docs, target)),
+    vscode.commands.registerCommand("gapReference.debugCurrentFile", (resource) => debugCurrentFile(resource))
   );
 
   for (const document of vscode.workspace.textDocuments || []) {
@@ -483,6 +484,38 @@ async function openLocalManual(context, docs, target) {
   await vscode.env.openExternal(uri);
 }
 
+async function debugCurrentFile(resource) {
+  const activeEditor = vscode.window.activeTextEditor;
+  const uri = resource && resource.fsPath ? resource : (activeEditor && activeEditor.document && activeEditor.document.uri);
+  if (!uri || !uri.fsPath) {
+    vscode.window.showWarningMessage("Open a GAP file before starting the debugger.");
+    return;
+  }
+
+  const document = activeEditor && activeEditor.document && activeEditor.document.uri.toString() === uri.toString()
+    ? activeEditor.document
+    : undefined;
+  if (document && document.languageId !== "gap") {
+    vscode.window.showWarningMessage("The active file is not a GAP file.");
+    return;
+  }
+  if (document && document.isDirty) {
+    const saved = await document.save();
+    if (!saved) {
+      vscode.window.showWarningMessage("Save the GAP file before starting the debugger.");
+      return;
+    }
+  }
+
+  await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+    type: "gap",
+    request: "launch",
+    name: "Debug GAP File",
+    program: uri.fsPath,
+    stopOnEntry: false
+  });
+}
+
 function resolveManualFilePath(config, docs, target) {
   const manualPath = resolveEntryManualPath(config, docs, target);
   return manualPath ? path.join(manualPath, target.file) : undefined;
@@ -599,6 +632,7 @@ function truncate(text, maxLength) {
 
 module.exports = {
   __test: {
+    debugCurrentFile,
     groupEntries,
     resolveManualFilePath
   },
