@@ -25,6 +25,7 @@ fs.writeFileSync(program, [
   "end;",
   "z := f(2);",
   "w := f(3);",
+  "Print(\"NO_NEWLINE\");",
   "Print(\"DONE\\n\");",
   ""
 ].join("\n"), "utf8");
@@ -120,24 +121,13 @@ async function main() {
   assert.strictEqual(initializeResponse.body.supportsEvaluateForHovers, true, "adapter should advertise hover evaluation");
   await waitForEvent("initialized");
 
-  const breakpointsSeq = send("setBreakpoints", {
-    source: {
-      name: "sample.g",
-      path: program
-    },
+  const launchSeq = send("launch", {
+    program,
     breakpoints: [
       {
         line: 7
       }
-    ]
-  });
-  const breakpointsResponse = await waitForResponse("setBreakpoints", breakpointsSeq);
-  assert.strictEqual(breakpointsResponse.body.breakpoints.length, 1, "one breakpoint should be returned");
-  assert.strictEqual(breakpointsResponse.body.breakpoints[0].verified, true, "line breakpoint should be verified");
-  assert.strictEqual(breakpointsResponse.body.breakpoints[0].line, 7, "breakpoint should stay on executable line 7");
-
-  const launchSeq = send("launch", {
-    program,
+    ],
     gapCommand: "wsl",
     stopOnEntry: false,
     maxValueLength: 200
@@ -257,6 +247,7 @@ async function main() {
     .filter((message) => message.type === "event" && message.event === "output")
     .map((message) => message.body.output)
     .join("");
+  assert(output.includes("NO_NEWLINE"), "debuggee stdout without a trailing newline should be forwarded");
   assert(output.includes("DONE"), "debuggee stdout should be forwarded");
 
   adapter.kill();

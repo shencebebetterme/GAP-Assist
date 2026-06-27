@@ -2,6 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug GAP File",
+      "type": "gap",
+      "request": "launch",
+      "program": "${file}",
+      "stopOnEntry": false
+    },
+    {
       "name": "Run GAP Extension",
       "type": "extensionHost",
       "request": "launch",

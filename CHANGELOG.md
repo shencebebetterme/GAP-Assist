@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.28
+
+- Passed current-file breakpoints directly when running `GAP: Debug Current File`, making command-launched sessions stop reliably.
+- Forwarded GAP output that is printed without a trailing newline before the next debug probe or process exit.
+- Added a workspace `Debug GAP File` launch configuration alongside the extension-host development configuration.
+
 ## 0.3.27
 
 - Enabled gutter breakpoints for GAP files through VS Code's breakpoint language contribution.

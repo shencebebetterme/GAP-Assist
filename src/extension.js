@@ -507,13 +507,28 @@ async function debugCurrentFile(resource) {
     }
   }
 
-  await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+  const breakpoints = currentFileBreakpoints(uri);
+  const started = await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
     type: "gap",
     request: "launch",
     name: "Debug GAP File",
     program: uri.fsPath,
+    breakpoints,
     stopOnEntry: false
   });
+  if (!started) {
+    vscode.window.showWarningMessage("GAP debugger did not start. Check the Debug Console for details.");
+  }
+}
+
+function currentFileBreakpoints(uri) {
+  return (vscode.debug.breakpoints || [])
+    .filter((breakpoint) => breakpoint.enabled !== false)
+    .filter((breakpoint) => breakpoint.location && breakpoint.location.uri && breakpoint.location.uri.toString() === uri.toString())
+    .map((breakpoint) => ({
+      line: breakpoint.location.range.start.line + 1,
+      column: breakpoint.location.range.start.character + 1
+    }));
 }
 
 function resolveManualFilePath(config, docs, target) {
@@ -632,6 +647,7 @@ function truncate(text, maxLength) {
 
 module.exports = {
   __test: {
+    currentFileBreakpoints,
     debugCurrentFile,
     groupEntries,
     resolveManualFilePath

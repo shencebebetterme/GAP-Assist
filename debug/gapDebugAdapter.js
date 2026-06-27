@@ -234,6 +234,7 @@ class GapDebugAdapter {
     });
     this.probesByPath.set(program, instrumented.probes);
     this.probesById = new Map(instrumented.probes.map((probe) => [probe.id, probe]));
+    this.applyLaunchBreakpoints(program, this.launchArgs.breakpoints);
 
     this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-"));
     const instrumentedPath = path.join(this.tempDir, `${path.basename(program)}.debug.g`);
@@ -253,6 +254,7 @@ class GapDebugAdapter {
     this.runtime.stdout.on("data", (chunk) => this.handleRuntimeOutput(chunk));
     this.runtime.stderr.on("data", (chunk) => this.sendOutput(chunk.toString("utf8"), "stderr"));
     this.runtime.on("exit", (code) => {
+      this.flushRuntimeBuffer();
       this.runtime = undefined;
       this.sendEvent("exited", { exitCode: typeof code === "number" ? code : 0 });
       this.sendEvent("terminated");
@@ -284,6 +286,10 @@ class GapDebugAdapter {
       return;
     }
 
+    if (markerIndex > 0) {
+      this.sendOutput(line.slice(0, markerIndex), "stdout");
+    }
+
     const markerLine = line.slice(markerIndex);
     if (markerLine.startsWith("__GAPDEBUG_HIT__\t")) {
       this.pendingHit = parseHitLine(markerLine);
@@ -300,6 +306,49 @@ class GapDebugAdapter {
       const hit = this.pendingHit;
       this.pendingHit = undefined;
       this.decideProbeHit(hit);
+    }
+  }
+
+  applyLaunchBreakpoints(program, requestedBreakpoints) {
+    if (!Array.isArray(requestedBreakpoints) || requestedBreakpoints.length === 0) {
+      return;
+    }
+
+    const sourcePath = normalizePath(program);
+    const probes = this.probesByPath.get(sourcePath) || [];
+    const stored = this.breakpointsByPath.get(sourcePath) || new Map();
+    for (const requestedBreakpoint of requestedBreakpoints) {
+      const line = Number.parseInt(requestedBreakpoint.line, 10);
+      if (!Number.isInteger(line)) {
+        continue;
+      }
+      const probe = nearestProbeForLine(probes, line);
+      if (!probe) {
+        continue;
+      }
+      if (!stored.has(probe.line)) {
+        stored.set(probe.line, {
+          id: this.nextBreakpointId,
+          verified: true,
+          line: probe.line,
+          source: sourceFromPath(sourcePath)
+        });
+        this.nextBreakpointId += 1;
+      }
+    }
+    this.breakpointsByPath.set(sourcePath, stored);
+  }
+
+  flushRuntimeBuffer() {
+    if (!this.runtimeBuffer) {
+      return;
+    }
+
+    const pending = this.runtimeBuffer;
+    this.runtimeBuffer = "";
+    const markerIndex = pending.replace(ANSI_RE, "").indexOf("__GAPDEBUG_");
+    if (markerIndex < 0) {
+      this.sendOutput(pending, "stdout");
     }
   }
 

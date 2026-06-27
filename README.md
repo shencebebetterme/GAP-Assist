@@ -106,7 +106,9 @@ Hover links open the exact local manual section anchor, for example `chap39.html
 
 Open a `.g` file, set breakpoints in the editor gutter, and run **GAP: Debug Current File** from the command palette, the editor title run menu, or the editor context menu.
 
-You can also use the Run and Debug view with this launch configuration:
+You can also use the Run and Debug view with **Debug GAP File**. The **Run GAP Extension** configuration is only for extension development and opens a separate Extension Development Host window; it does not debug the active `.g` file.
+
+The GAP debug launch configuration is:
 
 ```json
 {
