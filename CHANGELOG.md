@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6
+
+- Added **Debug Cell** to the notebook execute-button dropdown for GAP code cells.
+
 ## 0.4.5
 
 - Removed the notebook cell-title debug action to avoid interfering with Jupyter cell execution controls.
