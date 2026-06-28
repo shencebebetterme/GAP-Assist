@@ -149,11 +149,11 @@ assert(documentedCallMarkdown.includes("```gap\nfunction("), "user function call
 assertHoverText(documentedCallMarkdown, "obj:", "user function call hover should show the parameter name");
 assert(documentedCallMarkdown.includes("Compute the size of a group"), "user function call hover should include attached doc comments");
 assert(documentedCallMarkdown.includes("**Documentation**"), "user function doc comments should have a styled documentation header");
-assert(documentedCallMarkdown.includes("> Compute the size"), "user function doc comments should render summary lines in a blockquote");
+assert(!documentedCallMarkdown.includes("> Compute the size"), "user function doc comments should be left-aligned, not blockquoted");
 assert(!documentedCallMarkdown.includes("**Documented parameters**"), "user function doc comments should avoid verbose parameter sections");
-assert(documentedCallMarkdown.includes("> **@param** `obj`"), "user function doc comments should render styled parameter labels");
+assert(documentedCallMarkdown.includes("**@param** `obj`"), "user function doc comments should render styled parameter labels");
 assert(documentedCallMarkdown.includes("object to inspect"), "user function doc comments should render parameter text");
-assert(documentedCallMarkdown.includes("> **@returns** integer size"), "user function doc comments should render return documentation");
+assert(documentedCallMarkdown.includes("**@returns** integer size"), "user function doc comments should render return documentation");
 
 const gcdCallSample = [
   "d := Gcd([10, 15]);",

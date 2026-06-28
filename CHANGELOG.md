@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.41
+
+- Left-aligned user function `##` documentation hovers while preserving the `Documentation` heading and line breaks.
+
 ## 0.3.40
 
 - Moved GAP hover markdown rendering out of `server/analyzer.js` into `server/hoverFormatter.js`.

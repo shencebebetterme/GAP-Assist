@@ -84,17 +84,17 @@ function appendFunctionDocumentation(lines, documentation) {
 
   lines.push("", "**Documentation**", "");
   for (const line of summary) {
-    lines.push(`> ${escapeMarkdown(line)}`);
+    lines.push(`${escapeMarkdown(line)}  `);
   }
   if (summary.length > 0 && (params.length > 0 || returns.length > 0)) {
-    lines.push(">");
+    lines.push("");
   }
   for (const parameter of params) {
     const text = parameter.text ? ` ${escapeMarkdown(parameter.text)}` : "";
-    lines.push(`> **@param** \`${escapeCode(parameter.name)}\`${text}`);
+    lines.push(`**@param** \`${escapeCode(parameter.name)}\`${text}  `);
   }
   for (const item of returns) {
-    lines.push(`> **@returns** ${escapeMarkdown(item)}`);
+    lines.push(`**@returns** ${escapeMarkdown(item)}  `);
   }
 }
 
