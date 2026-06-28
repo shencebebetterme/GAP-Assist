@@ -141,6 +141,9 @@ function validateDeclarations(declarations, failures) {
     failures.push("data/gap-declarations.json must contain a declarations object");
     return;
   }
+  if (declarations.source && (declarations.source.gapRoot || declarations.source.libPath)) {
+    failures.push("data/gap-declarations.json must not contain absolute local GAP installation paths");
+  }
   if (!Array.isArray(declarations.names) || declarations.names.length < 1000) {
     failures.push("data/gap-declarations.json should contain at least 1000 declared GAP names");
     return;
@@ -169,6 +172,12 @@ function validateDocs(docs, failures) {
   }
 
   const sourceManuals = docs.source && Array.isArray(docs.source.manuals) ? docs.source.manuals : [];
+  if (docs.source && (docs.source.manualPath || docs.source.gapRoot)) {
+    failures.push("data/gap-docs.json must not contain absolute local GAP installation paths");
+  }
+  if (sourceManuals.some((manual) => manual.manualPath || manual.gapRoot)) {
+    failures.push("data/gap-docs.json manuals must not contain absolute local GAP installation paths");
+  }
   const packageManuals = sourceManuals.filter((manual) => manual.type === "package");
   if (packageManuals.length < 160) {
     failures.push("data/gap-docs.json should include installed GAP package manuals");

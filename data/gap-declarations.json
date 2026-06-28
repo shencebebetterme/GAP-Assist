@@ -1,8 +1,6 @@
 {
   "generatedAt": "2026-06-26T18:13:02.107Z",
   "source": {
-    "gapRoot": "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1",
-    "libPath": "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1\\lib",
     "generator": "scripts/extract-gap-declarations.js",
     "filesRead": 204
   },

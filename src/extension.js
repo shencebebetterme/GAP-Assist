@@ -24,7 +24,7 @@ function activate(context) {
     docs = loadDocumentation(context.extensionPath);
     declarations = loadDeclarations(context.extensionPath);
   } catch (error) {
-    vscode.window.showWarningMessage(`GAP Reference Assistant could not load language data: ${error.message}`);
+    vscode.window.showWarningMessage(`GAP Assistant could not load language data: ${error.message}`);
     return;
   }
 
@@ -755,7 +755,7 @@ async function openLocalManual(context, docs, target) {
   const config = vscode.workspace.getConfiguration("gapReference");
   const filePath = resolveManualFilePath(config, docs, target);
   if (!filePath) {
-    vscode.window.showWarningMessage("GAP Reference Assistant has no configured GAP installation or manual path.");
+    vscode.window.showWarningMessage("GAP Assistant has no configured GAP installation or manual path.");
     return;
   }
 
@@ -886,14 +886,7 @@ function resolveEntryManualPath(config, docs, target = {}) {
       return path.join(gapInstallationPath, ...manualRelativePath.split("/"));
     }
 
-    const sourceManual = findSourceManual(docs, target, manualRelativePath);
-    if (sourceManual && sourceManual.manualPath) {
-      return sourceManual.manualPath;
-    }
-
-    if (docs && docs.source && docs.source.gapRoot) {
-      return path.join(docs.source.gapRoot, ...manualRelativePath.split("/"));
-    }
+    return undefined;
   }
 
   return resolveManualPath(config, docs);
@@ -901,16 +894,6 @@ function resolveEntryManualPath(config, docs, target = {}) {
 
 function isReferenceManualTarget(target, manualRelativePath) {
   return target.manualId === "ref" || manualRelativePath === "doc/ref";
-}
-
-function findSourceManual(docs, target, manualRelativePath) {
-  const manuals = docs && docs.source && Array.isArray(docs.source.manuals) ? docs.source.manuals : [];
-  return manuals.find((manual) => {
-    return (
-      (target.manualId && manual.id === target.manualId) ||
-      (manualRelativePath && normalizeManualRelativePath(manual.manualRelativePath) === manualRelativePath)
-    );
-  });
 }
 
 function resolveManualPath(config, docs) {
@@ -924,7 +907,7 @@ function resolveManualPath(config, docs) {
     return path.join(gapInstallationPath, "doc", "ref");
   }
 
-  return docs.source && docs.source.manualPath;
+  return undefined;
 }
 
 function normalizeSettingPath(value) {

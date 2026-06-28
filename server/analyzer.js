@@ -1600,6 +1600,10 @@ function inferBinaryExpression(binary, scope, data, expressionOffset) {
       return numericBinaryResult(binary.operator, leftType, rightType);
     }
 
+    if (binary.operator === "*" && isMultiplicativeType(leftType) && isMultiplicativeType(rightType)) {
+      return multiplicativeBinaryResult(leftType, rightType);
+    }
+
     if (isClearlyInvalidArithmeticOperand(leftType) || isClearlyInvalidArithmeticOperand(rightType)) {
       reportDiagnostic(
         data,
@@ -1670,6 +1674,22 @@ function numericBinaryResult(operator, leftType, rightType) {
     return typeInfo("number", ["IsObject", "IsRat"], { confidence: "operator" });
   }
   return typeInfo("integer", ["IsObject", "IsInt"], { confidence: "operator" });
+}
+
+function isMultiplicativeType(type) {
+  return hasAnyFilter(type, ["IsPerm", "IsMultiplicativeElementWithInverse"]);
+}
+
+function multiplicativeBinaryResult(leftType, rightType) {
+  if (hasAnyFilter(leftType, ["IsPerm"]) && hasAnyFilter(rightType, ["IsPerm"])) {
+    return typeInfo("permutation", ["IsObject", "IsPerm"], { confidence: "operator" });
+  }
+
+  return typeInfo(
+    "group element",
+    ["IsObject", "IsMultiplicativeElementWithInverse"],
+    { confidence: "operator" }
+  );
 }
 
 function parseBinaryExpression(expr) {
@@ -1939,7 +1959,7 @@ function reportDiagnostic(data, offset, length, message, options = {}) {
 
   data.diagnostics.push({
     severity: options.severity || 1,
-    source: "gap-reference-assistant",
+    source: "gap-assistant",
     code: options.code || "operator-type",
     message,
     range: {

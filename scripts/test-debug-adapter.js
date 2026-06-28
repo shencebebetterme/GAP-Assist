@@ -16,13 +16,13 @@ if (!hasWslGap()) {
 }
 
 assert.strictEqual(
-  unescapeField("C:\\\\Users\\\\Ce\\\\Documents\\\\examples\\\\test.g"),
-  "C:\\Users\\Ce\\Documents\\examples\\test.g",
+  unescapeField("C:\\\\GAP\\\\examples\\\\test.g"),
+  "C:\\GAP\\examples\\test.g",
   "escaped Windows paths ending in test.g should not be parsed as tab escapes"
 );
 assert.strictEqual(
-  parseHitLine("__GAPDEBUG_HIT__\t4\tC:\\\\Users\\\\Ce\\\\Documents\\\\examples\\\\test.g\t4\t1\t<main>\t0").sourcePath,
-  "C:\\Users\\Ce\\Documents\\examples\\test.g",
+  parseHitLine("__GAPDEBUG_HIT__\t4\tC:\\\\GAP\\\\examples\\\\test.g\t4\t1\t<main>\t0").sourcePath,
+  "C:\\GAP\\examples\\test.g",
   "hit source path should preserve the full Windows file name"
 );
 assert.strictEqual(
@@ -39,17 +39,18 @@ assert.strictEqual(
   "instrumented GAP functions should be compacted before display"
 );
 const locationMap = [];
+const sampleSourcePath = path.join(root, "examples", "sample.g");
 locationMap[151] = {
-  sourcePath: "C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g",
+  sourcePath: sampleSourcePath,
   line: 71
 };
 assert.strictEqual(
   rewriteInstrumentedLocations(
-    "called from read-eval loop at /mnt/c/Users/Ce/AppData/Local/Temp/gap-debug-abc/sample.g.debug.g:151",
-    ["/mnt/c/Users/Ce/AppData/Local/Temp/gap-debug-abc/sample.g.debug.g"],
+    "called from read-eval loop at /tmp/gap-debug-abc/sample.g.debug.g:151",
+    ["/tmp/gap-debug-abc/sample.g.debug.g"],
     locationMap
   ),
-  "called from read-eval loop at C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g:71",
+  `called from read-eval loop at ${sampleSourcePath}:71`,
   "debug console output should rewrite generated GAP file locations to original source locations"
 );
 const unitAdapterOutput = [];
@@ -59,7 +60,7 @@ const unitAdapter = new GapDebugAdapter(process.stdin, {
   }
 });
 unitAdapter.currentProbe = {
-  sourcePath: "C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g",
+  sourcePath: sampleSourcePath,
   line: 71
 };
 unitAdapter.observeRuntimeOutputForError("Error, <expr> must be 'true' or 'false'\ncalled from sample.g:71\ntype 'quit;' to quit to outer loop");

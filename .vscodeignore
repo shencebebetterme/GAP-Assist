@@ -2,6 +2,7 @@
 .gitignore
 .vscode/**
 examples/**
+!examples/*.jpg
 scripts/*.tmp
 node_modules/**
 *.vsix

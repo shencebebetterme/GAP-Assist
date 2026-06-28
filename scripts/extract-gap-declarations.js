@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 
-const DEFAULT_GAP_ROOT = "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1";
 const OUTPUT_FILE = path.join(__dirname, "..", "data", "gap-declarations.json");
 const DECLARE_NAMES = [
   "DeclareAttribute",
@@ -19,7 +18,12 @@ const DECLARE_NAMES = [
 ];
 
 function main() {
-  const gapRoot = path.resolve(process.argv[2] || process.env.GAP_ROOT || DEFAULT_GAP_ROOT);
+  const input = process.argv[2] || process.env.GAP_ROOT || process.env.GAP_HOME;
+  if (!input) {
+    fail("Pass a GAP root directory, or set GAP_ROOT or GAP_HOME.");
+  }
+
+  const gapRoot = path.resolve(input);
   const libPath = path.join(gapRoot, "lib");
   if (!fs.existsSync(libPath)) {
     fail(`GAP library directory does not exist: ${libPath}`);
@@ -50,8 +54,6 @@ function main() {
   const output = {
     generatedAt: new Date().toISOString(),
     source: {
-      gapRoot,
-      libPath,
       generator: "scripts/extract-gap-declarations.js",
       filesRead: files.length
     },

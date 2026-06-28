@@ -52,8 +52,8 @@ function handleMessage(message) {
         hoverProvider: true
       },
       serverInfo: {
-        name: "gap-reference-assistant-language-server",
-        version: "0.3.41"
+        name: "gap-assistant-language-server",
+        version: "0.4.0"
       }
     });
     return;

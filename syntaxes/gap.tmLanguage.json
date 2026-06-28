@@ -88,7 +88,7 @@
           "match": "\\b(?:atomic|break|continue|do|elif|else|end|fi|for|function|if|local|od|readonly|readwrite|rec|repeat|return|then|try|catch|until|while)\\b"
         },
         {
-          "name": "keyword.operator.word.gap",
+          "name": "keyword.control.gap",
           "match": "\\b(?:and|in|mod|not|or)\\b"
         }
       ]

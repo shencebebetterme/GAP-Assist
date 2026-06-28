@@ -329,6 +329,18 @@ assert.strictEqual(operatorAnalysis.diagnostics.length, 1, "invalid string arith
 assert(operatorAnalysis.diagnostics[0].message.includes("Operator + may fail"), "diagnostic should explain the operator risk");
 assert.strictEqual(operatorAnalysis.diagnostics[0].range.start.line, 3, "diagnostic should point at the invalid operator line");
 
+const permutationOperatorSample = [
+  "perm1 := (1,2,3);",
+  "perm2 := (2,3,4);",
+  "product := perm1 * perm2;",
+  ""
+].join("\n");
+const permutationOperatorAnalysis = analyzer.analyze(permutationOperatorSample, "memory://permutation-operators.g");
+const permutationOperatorScope = permutationOperatorAnalysis.scopes[0];
+const product = permutationOperatorScope.symbols.get("product");
+assert(product && product.type.filters.includes("IsPerm"), "permutation multiplication should infer a permutation result");
+assert.strictEqual(permutationOperatorAnalysis.diagnostics.length, 0, "permutation multiplication should not produce an operator diagnostic");
+
 const operatorSemanticsSample = [
   "n := 5;",
   "modValue := n mod 2;",

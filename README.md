@@ -1,114 +1,84 @@
-# GAP Reference Assistant
+# GAP Assistant
 
-This workspace contains a local VS Code extension for GAP.
+GAP Assistant brings editor support, reference hovers, static analysis, and debugging to GAP source files in VS Code.
 
-Features:
+It supports `.g`, `.gap`, `.gd`, `.gi`, and `.tst` files and is designed for day-to-day work with GAP scripts, package code, examples, and exploratory algebra computations.
 
-- GAP language registration for `.g`, `.gap`, `.gd`, `.gi`, and `.tst` files.
-- TextMate syntax highlighting for GAP comments, strings, keywords, constants, operators, declarations, and function calls.
+## Highlights
+
+- GAP syntax highlighting for comments, strings, characters, numbers, keywords, declarations, operators, function calls, and inferred hover type snippets.
 - Semantic highlighting for documented GAP reference and package symbols.
-- Hover documentation for GAP reference manual and official package functions and operations generated from the local GAP 4.15.1 HTML files.
-- Structured hovers with section headings, styled inline code, grouped signatures, and GAP examples from the manual.
-- Static GAP inference hovers for globals, locals, functions, return values, input filters, filter sets, and container structure.
-- Local stdio GAP language server used by the extension for inference hovers.
-- Experimental VS Code debugger for `.g` files with line breakpoints, statement-level stepping, runtime variables, and hover/watch evaluation for captured variable names.
-- Fault-tolerant parser-backed analysis for assignments, local declarations, user functions, returns, branches, and loop bodies.
-- Basic static diagnostics for likely runtime errors, including obvious invalid operator uses such as string-plus-integer arithmetic.
-- Hover links that open the configured local manual page.
+- Reference manual hovers generated from the GAP manual and installed package manuals, with grouped signatures, examples, and local manual links.
+- Static inference hovers for globals, locals, user functions, return values, records, lists, callback parameters, and container element types.
+- User `##` doc-comment hovers for functions, including `@param` and `@returns`.
+- Static diagnostics for likely GAP runtime errors, including invalid operators, non-boolean conditions, unsafe selectors, incompatible calls, unassigned locals, and callback predicate mistakes.
+- Filter-aware reasoning for GAP objects, preserving facts such as `IsGroup`, `IsPermGroup`, `IsList`, `IsPerm`, and `IsMultiplicativeElementWithInverse`.
+- A VS Code debugger for `.g` files with breakpoints, statement stepping, variables, hover/watch values, inline values, and mapped runtime errors.
 
-## Use In VS Code
+## Screenshots
 
-Open this folder in VS Code and press `F5` to launch an Extension Development Host, or run VS Code with:
+### Function Hovers
 
-```powershell
-code --extensionDevelopmentPath "C:\Users\Ce\Documents\codex_playground\GAP_frontend"
+![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/hover%20func.jpg)
+
+### User Doc Comments
+
+![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/doc%20comments.jpg)
+
+### Record And Container Types
+
+![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/hover%20record.jpg)
+
+### GAP Debugging
+
+![Debugger](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/debug.jpg)
+
+## Static Analysis
+
+GAP Assistant models values by GAP filters rather than by a single OO-style type. For example, `SymmetricGroup(4)` is inferred as a group satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`.
+
+The analyzer understands common GAP forms:
+
+- assignments, locals, user functions, returns, conditionals, and loops
+- integers, rationals, booleans, strings, lists, records, and permutations
+- list and record selectors such as `gens[1]`, `values{[1, 2]}`, and `rec(...).field`
+- common constructors and operations such as `SymmetricGroup`, `Group`, `GeneratorsOfGroup`, `Elements`, `AsList`, `Size`, `Length`, `List`, `Filtered`, and `ForAll`
+- mapper and predicate callbacks such as `i -> Factorial(i)`
+- branch-sensitive filters from guards such as `if IsString(obj) then`
+- fallthrough narrowing after terminating guards such as `if not IsString(obj) then return fail; fi;`
+
+Examples of useful inference:
+
+```gap
+G := SymmetricGroup(4);
+gens := GeneratorsOfGroup(G);      # list of group generators[group element]
+first := gens[1];                  # group element
+
+values := List([1 .. 5], i -> Factorial(i));
+info := rec(count := Length(values), first := values[1]);
 ```
 
-Open `examples/sample.g`, then hover names such as `SymmetricGroup`, `Size`, or `IsGroup`.
+Permutation arithmetic is recognized:
 
-Static inference is filter-centric. A GAP value is modeled with every filter the analyzer can infer, for example `SymmetricGroup(4)` is a group object satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`; this avoids pretending GAP has a single classical OO inheritance type. Hovers show the most useful result as a compact highlighted snippet, with inferred types styled distinctly from symbol names and container details such as `list[positive integer]` or record fields like `count: integer` kept in a terse structure section.
-
-User-defined functions also get best-effort input filters. For example, if a parameter is passed to `Size(obj)` or `GeneratorsOfGroup(obj)`, the hover can show GAP declaration filters such as `IsListOrCollection` or `IsMagmaWithInverses`; compatible call-site filters are tracked as observed evidence without narrowing the function's displayed requirement.
-
-Operator inference currently covers common arithmetic, comparison, boolean, membership, `mod`, and power forms following the precedence in GAP's reader. For example `m := n + 10;` can infer `m` as an integer after `n := 5;`, while `b := "hello" + 2;`, `not 3`, `1 in 5`, or `2 ^ 3 ^ 4` are reported as likely operator errors.
-
-Control-flow conditions are checked when their type is clear. Expressions such as `if 3 then`, `elif "bad" then`, `while [1] do`, and `repeat ... until 5` are reported because GAP expects boolean conditions.
-
-Selector inference follows GAP's term-level selector behavior. The analyzer can infer element filters for `gens[1]`, preserve element filters through `gens{[1]}`, infer characters and strings from string selectors, and use record literal field types for expressions such as `rec(count := 3).count`. Clear selector mistakes such as `5[1]`, `gens["x"]`, `gens{1}`, or `[1, 2].name` are reported.
-
-Collection materializers preserve element types where the input type is known. For example, `Elements(G)` or `AsList(G)` after `G := SymmetricGroup(4)` is inferred as a list of group elements, and indexing that list preserves the group element type.
-
-Declared local variables are tracked for definite assignment. If a function declares `local value;` and then reads `value` before assigning to it, the checker reports the likely GAP runtime error; unknown identifiers that may be globals are still left alone.
-
-Definite assignment also flows through conditionals. A local assigned in every reaching branch of an `if`/`elif`/`else` is treated as assigned after the conditional; branches that `return`, `ErrorNoReturn(...)`, or `TryNextMethod()` do not block that conclusion.
-
-The analyzer also performs limited branch-sensitive filter flow. Inside a guarded block such as `if IsString(obj) then`, hovers, return inference, and operator diagnostics use `IsString` as evidence for `obj` in that branch.
-
-Negated predicates are tracked on the false path when they can be represented positively. For example, inside the `else` branch of `if not IsString(obj) then ... else ... fi`, the analyzer treats `obj` as satisfying `IsString`; the same evidence is carried through later `elif` and `else` branches.
-
-Call checking uses GAP declaration filters where available. For example, `GeneratorsOfGroup(5);` is reported because `GeneratorsOfGroup` resolves to a declaration requiring `IsMagmaWithInverses`, while a call guarded by `if IsGroup(obj) then` is treated as compatible in that branch.
-
-The same compatibility check is applied to user-defined functions once their parameter filters have been inferred from the function body. For example, a function that calls `GeneratorsOfGroup(obj)` learns that `obj` should be group-like, and later calls with clearly incompatible arguments are reported without feeding that bad evidence back into the function contract.
-
-Common mapper calls are analyzed as well. In `List([1 .. 4], i -> Factorial(i))`, the arrow parameter `i` is treated as an integer from the range element type, the result is inferred as a list of positive integers, and mistakes inside the mapper body can produce diagnostics.
-
-Predicate callback calls are checked too. `Filtered(gens, g -> IsObject(g))` preserves the generator element filters in the filtered list, while `ForAll([1 .. 4], i -> i + 1)` is reported because the predicate body returns an integer instead of a boolean.
-
-Loop variables also receive iterator element filters. In `for i in [1 .. 4] do`, `i` is treated as an integer inside the loop body; in `for g in GeneratorsOfGroup(G) do`, `g` inherits the generator element filters.
-
-Loop conditions can refine symbols too. Inside `while IsString(obj) do`, the analyzer treats `obj` as satisfying `IsString` for hovers, return inference, and diagnostics in the loop body.
-
-Terminating negative guards refine the following code path. After `if not IsString(obj) then return fail; fi;`, later statements in the same block treat `obj` as satisfying `IsString`.
-
-The same fallthrough narrowing is applied for strong terminating guard calls such as `ErrorNoReturn(...)` and `TryNextMethod()`. Plain `Error(...)` is not currently treated as non-returning because GAP's break loop can be recoverable.
-
-`repeat ... until` loops refine the following path from positive until predicates. After `repeat ... until IsGroup(obj);`, later statements treat `obj` as group-like.
-
-Hover descriptions are hard-wrapped by default. Adjust `gapReference.hover.wrapColumn` in VS Code settings if you prefer wider or narrower documentation lines. Use `gapReference.hover.maxExamples` and `gapReference.hover.maxExampleLines` to control how many manual examples are shown.
-
-## Regenerate Documentation Data
-
-The checked-in hover data is generated from the installed GAP manual tree:
-
-```text
-C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\doc\ref
-C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\doc
-C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\htm
-C:\Programs\GAP-4.15.1\runtime\opt\gap-4.15.1\pkg\*\doc\htm\*
+```gap
+perm1 := (1,2,3);
+perm2 := (2,3,4);
+product := perm1 * perm2;          # permutation
 ```
 
-For hover links, set `gapReference.gapInstallationPath` to your GAP installation directory, for example:
+Clear mistakes are reported early:
 
-```json
-"gapReference.gapInstallationPath": "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1"
+```gap
+badAdd := "hello" + 2;
+badCondition := 3;
+badPredicate := ForAll([1 .. 4], i -> i + 1);
 ```
 
-If your reference manual is not under `doc/ref` inside the installation directory, set `gapReference.manualPath` directly to the manual HTML directory.
-Package manual links use `gapReference.gapInstallationPath` plus each package manual's relative path, such as `pkg/digraphs/doc` or `pkg/ace/htm`.
+## Debugging GAP Files
 
-Regenerate it with:
+Open a `.g` file, set breakpoints in the editor gutter, then run **GAP: Debug Current File** from the command palette, editor title run menu, or editor context menu.
 
-```powershell
-npm run extract-docs
-```
-
-Or pass a different GAP installation directory or reference manual directory:
-
-```powershell
-node scripts/extract-gap-docs.js "C:\path\to\gap\doc\ref"
-```
-
-Set `GAP_DOCS_INCLUDE_PACKAGES=0` before running the extractor if you only want the core reference manual.
-
-Hover links open the exact local manual section anchor, for example `chap39.html#X7B75879B8085120A` or `pkg/ace/htm/CHAP001.htm#SSEC002.1`.
-
-## Debug GAP Files
-
-Open a `.g` file, set breakpoints in the editor gutter, and run **GAP: Debug Current File** from the command palette, the editor title run menu, or the editor context menu.
-
-You can also use the Run and Debug view with **Debug GAP File**. The **Run GAP Extension** configuration is only for extension development and opens a separate Extension Development Host window; it does not debug the active `.g` file.
-
-The GAP debug launch configuration is:
+You can also use the Run and Debug view with this launch configuration:
 
 ```json
 {
@@ -120,26 +90,114 @@ The GAP debug launch configuration is:
 }
 ```
 
-On Windows, the debug adapter defaults to `wsl gap -q -x 100000`. On other platforms it defaults to `gap -q -x 100000`. Override `gapCommand` and `gapArgs` in `launch.json` if GAP is installed somewhere else.
+On Windows, the debugger defaults to `wsl gap -q -x 100000`. On macOS and Linux, it defaults to `gap -q -x 100000`.
 
-The debugger runs an instrumented temporary copy of the current source file. Breakpoints are mapped to executable GAP statements, stepping is statement-level for user `.g` code, and the Variables panel plus hover/watch evaluation show runtime values for variables visible to the inserted probes. Arbitrary GAP expression evaluation and precise stepping inside GAP kernel or compiled library internals are not currently supported.
+If GAP is installed somewhere else, set `gapCommand` and `gapArgs` in `launch.json`:
 
-## Validate
-
-```powershell
-npm run validate
+```json
+{
+  "type": "gap",
+  "request": "launch",
+  "name": "Debug GAP File",
+  "program": "${file}",
+  "gapCommand": "gap",
+  "gapArgs": ["-q", "-x", "100000"]
+}
 ```
 
-## Language Server Prototype
+The debugger runs an instrumented temporary copy of the active source file. Breakpoints map back to the original file, stepping is statement-level for user `.g` code, and runtime errors are reported at the original source line where possible.
 
-The independent analyzer and minimal stdio language server live in `server/`.
+## Local Manual Links
+
+Hover documentation works from bundled generated data. Opening the full local HTML manual requires a local GAP documentation path.
+
+Set one of these VS Code settings:
+
+```json
+{
+  "gapReference.gapInstallationPath": "C:\\path\\to\\gap-4.15.1"
+}
+```
+
+or:
+
+```json
+{
+  "gapReference.manualPath": "C:\\path\\to\\gap-4.15.1\\doc\\ref"
+}
+```
+
+Use `gapReference.manualPath` when the reference manual is not under `doc/ref` inside the GAP installation directory. Package manual links use `gapReference.gapInstallationPath` plus each package manual's relative path, such as `pkg/digraphs/doc` or `pkg/ace/htm`.
+
+## Settings
+
+- `gapReference.gapInstallationPath`: Optional GAP installation directory for local manual links.
+- `gapReference.manualPath`: Optional direct path to the GAP reference manual HTML directory.
+- `gapReference.hover.maxEntries`: Maximum number of reference entries in one hover.
+- `gapReference.hover.maxDescriptionLength`: Maximum hover description length before truncation.
+- `gapReference.hover.wrapColumn`: Wrap width for hover paragraphs and signatures.
+- `gapReference.hover.maxExamples`: Maximum number of manual examples in one hover.
+- `gapReference.hover.maxExampleLines`: Maximum lines per manual example.
+- `gapReference.semanticHighlighting.enabled`: Toggle semantic highlighting for documented GAP symbols.
+
+## Regenerating GAP Data
+
+The checked-in documentation and declaration data are generated from a local GAP installation, but absolute installation paths are not stored in the packaged data.
+
+Regenerate declaration data:
+
+```powershell
+$env:GAP_ROOT = "C:\path\to\gap-4.15.1"
+npm run extract-declarations
+```
+
+Regenerate reference and package documentation:
+
+```powershell
+$env:GAP_ROOT = "C:\path\to\gap-4.15.1"
+npm run extract-docs
+```
+
+You may also pass a GAP root or reference manual directory directly:
+
+```powershell
+node scripts/extract-gap-docs.js "C:\path\to\gap-4.15.1"
+node scripts/extract-gap-docs.js "C:\path\to\gap-4.15.1\doc\ref"
+```
+
+Set `GAP_DOCS_INCLUDE_PACKAGES=0` before running `extract-docs` if you only want the core reference manual.
+
+## Development
+
+Install dependencies, run validation, and package the extension:
+
+```powershell
+npm install
+npm run validate
+npx @vscode/vsce package
+```
+
+Run the language server directly:
 
 ```powershell
 npm run language-server
 ```
 
-The VS Code extension uses a lightweight local client in `src/lspClient.js` to request inference hovers from this server. The server currently supports initialization, full document sync, hover, and diagnostic publication; the extension still renders the manual documentation locally and falls back to the in-process analyzer if the server is unavailable.
+Open this repository in VS Code and press `F5` to launch an Extension Development Host.
 
-The parser layer in `server/parser.js` is modeled against the installed GAP reader/scanner sources noted in `server/GAP_SOURCE_NOTES.md`. It is intended as the base for deeper filter-flow and runtime-risk checks, not as a complete replacement for GAP's own parser.
+## Publishing
 
-The generated documentation snippets come from the installed GAP reference manual. Keep GAP documentation licensing in mind if you redistribute the extension.
+Create or choose a Visual Studio Marketplace publisher, then package and publish with `vsce`:
+
+```powershell
+npm run validate
+npx @vscode/vsce package
+npx @vscode/vsce login shencebebetterme
+npx @vscode/vsce publish
+```
+
+If your Marketplace publisher ID is not `shencebebetterme`, update the `publisher` field in `package.json` before packaging.
+
+## Notes
+
+GAP Assistant is a static helper and debugger integration. It does not replace GAP's own parser, evaluator, library, or method selection. Runtime debugging uses an instrumented temporary copy of the current file, so stepping is focused on user `.g` statements rather than GAP kernel internals.

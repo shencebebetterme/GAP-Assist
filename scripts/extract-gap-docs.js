@@ -3,8 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 
-const DEFAULT_GAP_ROOT = "C:\\Programs\\GAP-4.15.1\\runtime\\opt\\gap-4.15.1";
-const DEFAULT_DOC_DIR = path.join(DEFAULT_GAP_ROOT, "doc", "ref");
 const OUTPUT_FILE = path.join(__dirname, "..", "data", "gap-docs.json");
 const MAX_BLOCKS = 5;
 const MAX_PARAGRAPHS = 4;
@@ -46,7 +44,12 @@ const KEYWORDS = [
 ];
 
 function main() {
-  const inputPath = path.resolve(process.argv[2] || process.env.GAP_REF_DOC || DEFAULT_DOC_DIR);
+  const input = process.argv[2] || process.env.GAP_REF_DOC || process.env.GAP_ROOT || process.env.GAP_HOME;
+  if (!input) {
+    fail("Pass a GAP root or reference manual directory, or set GAP_REF_DOC, GAP_ROOT, or GAP_HOME.");
+  }
+
+  const inputPath = path.resolve(input);
   const { gapRoot, refManual, manuals } = discoverManuals(inputPath);
 
   const entriesByName = {};
@@ -84,11 +87,9 @@ function main() {
   const output = {
     generatedAt: new Date().toISOString(),
     source: {
-      manualPath: refManual.manualPath,
-      gapRoot,
       generator: "scripts/extract-gap-docs.js",
       filesRead,
-      manuals: manuals.map(({ chapterFiles, ...manual }) => ({
+      manuals: manuals.map(({ chapterFiles, manualPath, gapRoot: manualGapRoot, ...manual }) => ({
         ...manual,
         filesRead: chapterFiles.length
       }))
@@ -221,9 +222,9 @@ function createManual({ id, type, format = "gapdoc", label, packageName, manualP
     format,
     label,
     packageName,
-    manualPath,
     manualRelativePath: gapRoot ? normalizeRelativePath(path.relative(gapRoot, manualPath)) : undefined,
-    chapterFiles
+    chapterFiles,
+    manualPath
   };
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Renamed the extension to GAP Assistant for Marketplace publication.
+- Accepted GAP permutation multiplication such as `perm1 * perm2` in static operator analysis.
+- Colored GAP word operators such as `and`, `or`, and `not` with the regular keyword scope.
+- Removed generated local installation paths from packaged documentation/declaration data.
+- Rewrote the README around public extension features, settings, screenshots, and publishing steps.
+
 ## 0.3.41
 
 - Left-aligned user function `##` documentation hovers while preserving the `Documentation` heading and line breaks.
