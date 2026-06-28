@@ -8,7 +8,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const adapterPath = path.join(root, "debug", "gapDebugAdapter.js");
-const { parseHitLine, parseVariableLine, runtimeVariableValue, unescapeField } = require("../debug/gapDebugAdapter");
+const { GapDebugAdapter, parseHitLine, parseVariableLine, rewriteInstrumentedLocations, runtimeVariableValue, unescapeField } = require("../debug/gapDebugAdapter");
 
 if (!hasWslGap()) {
   console.log("Debug adapter smoke test skipped because wsl gap is unavailable.");
@@ -38,6 +38,33 @@ assert.strictEqual(
   "function (obj) ... end",
   "instrumented GAP functions should be compacted before display"
 );
+const locationMap = [];
+locationMap[151] = {
+  sourcePath: "C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g",
+  line: 71
+};
+assert.strictEqual(
+  rewriteInstrumentedLocations(
+    "called from read-eval loop at /mnt/c/Users/Ce/AppData/Local/Temp/gap-debug-abc/sample.g.debug.g:151",
+    ["/mnt/c/Users/Ce/AppData/Local/Temp/gap-debug-abc/sample.g.debug.g"],
+    locationMap
+  ),
+  "called from read-eval loop at C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g:71",
+  "debug console output should rewrite generated GAP file locations to original source locations"
+);
+const unitAdapterOutput = [];
+const unitAdapter = new GapDebugAdapter(process.stdin, {
+  write(chunk) {
+    unitAdapterOutput.push(String(chunk));
+  }
+});
+unitAdapter.currentProbe = {
+  sourcePath: "C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g",
+  line: 71
+};
+unitAdapter.maybePauseOnRuntimeError("Error, <expr> must be 'true' or 'false'");
+assert.strictEqual(unitAdapter.paused, true, "adapter should return to a paused state after a GAP runtime error");
+assert(unitAdapterOutput.join("").includes("\"reason\":\"exception\""), "adapter should send a stopped exception event after a GAP runtime error");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-adapter-test-"));
 const program = path.join(tempDir, "sample.g");
@@ -52,6 +79,7 @@ fs.writeFileSync(program, [
   "w := f(3);",
   "Print(\"NO_NEWLINE\");",
   "Print(\"DONE\\n\");",
+  "bad := ForAll([1 .. 2], i -> i + 1);",
   ""
 ].join("\n"), "utf8");
 
@@ -306,11 +334,35 @@ async function main() {
   assert(w, "captured variables after stepOut should include w");
   assert.strictEqual(w.value, "4", "stepOut should capture the completed caller assignment");
 
+  const errorEventStart = messages.length;
   const continueSeq = send("continue", {
     threadId: 1
   });
   await waitForResponse("continue", continueSeq);
-  await waitForEvent("terminated");
+  const errorStopped = await waitForEvent("stopped", errorEventStart);
+  assert.strictEqual(errorStopped.body.reason, "exception", "adapter should pause again when GAP reports a runtime error");
+
+  const errorStackSeq = send("stackTrace", {
+    threadId: 1
+  });
+  const errorStack = await waitForResponse("stackTrace", errorStackSeq);
+  assert.strictEqual(errorStack.body.stackFrames[0].line, 11, "runtime error stack should point at the original failing GAP line");
+  assert.strictEqual(path.normalize(errorStack.body.stackFrames[0].source.path), path.normalize(program), "runtime error stack should use the original source path");
+
+  const errorGlobalsSeq = send("variables", {
+    variablesReference: globalsReference
+  });
+  const errorGlobals = await waitForResponse("variables", errorGlobalsSeq);
+  assert(errorGlobals.body.variables.some((variable) => variable.name === "w" && variable.value === "4"), "runtime error pause should preserve the previous captured variable values");
+  await waitFor(
+    (message) => message.type === "event" && message.event === "output" && String(message.body.output).includes(`${program}:11`),
+    "remapped runtime error source location",
+    15000,
+    errorEventStart
+  );
+
+  const disconnectSeq = send("disconnect", {});
+  await waitForResponse("disconnect", disconnectSeq);
 
   const output = messages
     .filter((message) => message.type === "event" && message.event === "output")
@@ -318,6 +370,7 @@ async function main() {
     .join("");
   assert(output.includes("NO_NEWLINE"), "debuggee stdout without a trailing newline should be forwarded");
   assert(output.includes("DONE"), "debuggee stdout should be forwarded");
+  assert(!output.includes(".debug.g:"), "debuggee output should not expose generated GAP debug source locations");
 
   adapter.kill();
   safeRemoveTempDir();

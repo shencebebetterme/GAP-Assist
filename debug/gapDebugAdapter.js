@@ -32,6 +32,10 @@ class GapDebugAdapter {
     this.currentProbe = undefined;
     this.currentVariables = new Map();
     this.tempDir = undefined;
+    this.instrumentedPath = undefined;
+    this.instrumentedRuntimePath = undefined;
+    this.instrumentedLineMap = [];
+    this.errorPaused = false;
     this.started = false;
   }
 
@@ -235,16 +239,19 @@ class GapDebugAdapter {
     });
     this.probesByPath.set(program, instrumented.probes);
     this.probesById = new Map(instrumented.probes.map((probe) => [probe.id, probe]));
+    this.instrumentedLineMap = instrumented.lineMap || [];
     this.applyLaunchBreakpoints(program, this.launchArgs.breakpoints);
 
     this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-"));
     const instrumentedPath = path.join(this.tempDir, `${path.basename(program)}.debug.g`);
+    this.instrumentedPath = instrumentedPath;
     fs.writeFileSync(instrumentedPath, instrumented.instrumented, "utf8");
 
     const command = this.launchArgs.gapCommand || defaultGapCommand();
     const configuredArgs = arrayValue(this.launchArgs.gapArgs);
     const args = configuredArgs.length > 0 ? configuredArgs : defaultGapArgs(command);
-    args.push(commandUsesWsl(command, args) ? await windowsPathToWslPath(instrumentedPath) : instrumentedPath);
+    this.instrumentedRuntimePath = commandUsesWsl(command, args) ? await windowsPathToWslPath(instrumentedPath) : instrumentedPath;
+    args.push(this.instrumentedRuntimePath);
 
     this.runtime = childProcess.spawn(command, args, {
       cwd: path.dirname(program),
@@ -253,7 +260,7 @@ class GapDebugAdapter {
     });
 
     this.runtime.stdout.on("data", (chunk) => this.handleRuntimeOutput(chunk));
-    this.runtime.stderr.on("data", (chunk) => this.sendOutput(chunk.toString("utf8"), "stderr"));
+    this.runtime.stderr.on("data", (chunk) => this.handleRuntimeStderr(chunk));
     this.runtime.on("exit", (code) => {
       this.flushRuntimeBuffer();
       this.runtime = undefined;
@@ -282,13 +289,16 @@ class GapDebugAdapter {
     const markerIndex = line.indexOf("__GAPDEBUG_");
     if (markerIndex < 0) {
       if (rawLine.length > 0) {
-        this.sendOutput(`${rawLine}\n`, "stdout");
+        this.sendOutput(`${this.rewriteRuntimeOutput(rawLine)}\n`, "stdout");
+        this.maybePauseOnRuntimeError(line);
       }
       return;
     }
 
     if (markerIndex > 0) {
-      this.sendOutput(line.slice(0, markerIndex), "stdout");
+      const prefix = line.slice(0, markerIndex);
+      this.sendOutput(this.rewriteRuntimeOutput(prefix), "stdout");
+      this.maybePauseOnRuntimeError(prefix);
     }
 
     const markerLine = line.slice(markerIndex);
@@ -349,8 +359,45 @@ class GapDebugAdapter {
     this.runtimeBuffer = "";
     const markerIndex = pending.replace(ANSI_RE, "").indexOf("__GAPDEBUG_");
     if (markerIndex < 0) {
-      this.sendOutput(pending, "stdout");
+      this.sendOutput(this.rewriteRuntimeOutput(pending), "stdout");
+      this.maybePauseOnRuntimeError(pending.replace(ANSI_RE, ""));
     }
+  }
+
+  handleRuntimeStderr(chunk) {
+    const text = chunk.toString("utf8");
+    this.sendOutput(this.rewriteRuntimeOutput(text), "stderr");
+    this.maybePauseOnRuntimeError(text.replace(ANSI_RE, ""));
+  }
+
+  rewriteRuntimeOutput(output) {
+    return rewriteInstrumentedLocations(output, [this.instrumentedRuntimePath, this.instrumentedPath], this.instrumentedLineMap);
+  }
+
+  maybePauseOnRuntimeError(text) {
+    if (this.paused || this.errorPaused || !hasGapRuntimeError(text)) {
+      return;
+    }
+
+    this.paused = true;
+    this.errorPaused = true;
+    this.pauseRequested = false;
+    this.stepMode = undefined;
+
+    const location = this.currentProbe && this.currentProbe.sourcePath && this.currentProbe.line
+      ? `${this.currentProbe.sourcePath}:${this.currentProbe.line}`
+      : undefined;
+    if (location) {
+      this.sendOutput(`GAP debugger paused on error near ${location}\n`, "stderr");
+    }
+
+    this.sendEvent("stopped", {
+      reason: "exception",
+      description: "GAP error",
+      text: location ? `GAP error near ${location}` : "GAP error",
+      threadId: THREAD_ID,
+      allThreadsStopped: true
+    });
   }
 
   decideProbeHit(hit) {
@@ -362,6 +409,7 @@ class GapDebugAdapter {
     const shouldStop = Boolean(firstStop || shouldStep || breakpoint || this.pauseRequested);
 
     this.currentProbe = { ...probe, ...hit };
+    this.errorPaused = false;
     const variableScopes = new Map((probe.variables || []).map((variable) => [variable.name, variable.scope || "local"]));
     this.currentVariables = new Map((hit.variables || []).map((variable) => [
       variable.name,
@@ -501,9 +549,11 @@ class GapDebugAdapter {
       return;
     }
 
+    const wasErrorPaused = this.errorPaused;
     this.paused = false;
-    this.stepMode = stepMode;
-    this.writeRuntimeCommand("__GAPDEBUG_CONTINUE__");
+    this.errorPaused = false;
+    this.stepMode = wasErrorPaused ? undefined : stepMode;
+    this.writeRuntimeCommand(wasErrorPaused ? "quit;" : "__GAPDEBUG_CONTINUE__");
   }
 
   pause(request) {
@@ -662,6 +712,29 @@ function nearestProbeForLine(probes, line) {
   return (probes || []).find((probe) => probe.line >= line);
 }
 
+function rewriteInstrumentedLocations(output, instrumentedPaths, lineMap) {
+  let rewritten = String(output || "");
+  const paths = [...new Set((instrumentedPaths || []).filter(Boolean).map(String))];
+  for (const instrumentedPath of paths) {
+    const pattern = new RegExp(`${escapeRegExp(instrumentedPath)}:(\\d+)(?::(\\d+))?`, "g");
+    rewritten = rewritten.replace(pattern, (match, lineText) => {
+      const mapped = lineMap && lineMap[Number.parseInt(lineText, 10)];
+      return mapped && mapped.sourcePath && mapped.line
+        ? `${mapped.sourcePath}:${mapped.line}`
+        : match;
+    });
+  }
+  return rewritten;
+}
+
+function hasGapRuntimeError(text) {
+  return /(^|\n)Error[,:\s]/.test(String(text || ""));
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function runtimeVariableValue(variable) {
   if (!variable || !variable.bound) {
     return "<unbound>";
@@ -724,6 +797,7 @@ module.exports = {
   GapDebugAdapter,
   parseHitLine,
   parseVariableLine,
+  rewriteInstrumentedLocations,
   runtimeVariableValue,
   unescapeField
 };

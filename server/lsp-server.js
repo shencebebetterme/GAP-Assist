@@ -53,7 +53,7 @@ function handleMessage(message) {
       },
       serverInfo: {
         name: "gap-reference-assistant-language-server",
-        version: "0.3.34"
+        version: "0.3.35"
       }
     });
     return;

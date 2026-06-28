@@ -44,10 +44,17 @@ assert(callProbe, "post-function call should get a probe");
 assert.deepStrictEqual(variableNames(callProbe), ["f", "x"], "top-level call should capture earlier assignments");
 assert.deepStrictEqual(callProbe.variables.map((variable) => variable.scope), ["global", "global"], "top-level visible variables should be globals");
 
-const instrumented = instrumentGapSource(source, sourcePath).instrumented;
+const instrumentedResult = instrumentGapSource(source, sourcePath);
+const instrumented = instrumentedResult.instrumented;
 assert(instrumented.includes("__GAPDEBUG_Probe("), "instrumented source should contain probe calls");
 assert(instrumented.includes("__GAPDEBUG_Capture(IsBound(x), function() return x; end)"), "instrumented source should capture x");
 assert(instrumented.endsWith("QUIT;\n"), "instrumented source should quit after running the file");
+const generatedCallLine = instrumented.split(/\n/).findIndex((line) => line.includes("z := f(2);")) + 1;
+assert.strictEqual(
+  instrumentedResult.lineMap[generatedCallLine].line,
+  7,
+  "instrumented line map should map generated source lines back to original GAP lines"
+);
 
 console.log("Debug instrumenter tests passed.");
 

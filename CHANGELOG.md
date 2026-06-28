@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.35
+
+- Kept the GAP debugger paused on runtime errors so inline values and variable scopes remain available.
+- Rewrote generated `.debug.g` runtime error locations back to the original GAP source file and line.
+
 ## 0.3.34
 
 - Added inline debug values for active function parameters at their declaration positions.

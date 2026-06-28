@@ -10,16 +10,19 @@ function instrumentGapSource(text, sourcePath, options = {}) {
   const probes = collectProbeMetadata(text, sourcePath, ast, lineStarts);
   const insertions = probes.map((probe) => ({
     offset: probe.offset,
-    text: probeCall(probe, options)
+    text: probeCall(probe, options),
+    probe
   }));
 
+  const prelude = gapDebugPrelude(options);
   const instrumented = applyInsertions(text, insertions);
   return {
     ast,
     lineStarts,
     probes,
-    prelude: gapDebugPrelude(options),
-    instrumented: `${gapDebugPrelude(options)}\n${instrumented}\nQUIT;\n`
+    prelude,
+    lineMap: buildInstrumentedLineMap(text, sourcePath, lineStarts, prelude, insertions),
+    instrumented: `${prelude}\n${instrumented}\nQUIT;\n`
   };
 }
 
@@ -203,6 +206,56 @@ function applyInsertions(text, insertions) {
     result = `${result.slice(0, insertion.offset)}${insertion.text}${result.slice(insertion.offset)}`;
   }
   return result;
+}
+
+function buildInstrumentedLineMap(text, sourcePath, lineStarts, prelude, insertions) {
+  const lineMap = [];
+  let generatedLine = 1;
+
+  const markLine = (origin) => {
+    if (origin && !lineMap[generatedLine]) {
+      lineMap[generatedLine] = origin;
+    }
+  };
+
+  const appendText = (chunk, originAtIndex) => {
+    for (let index = 0; index < chunk.length; index += 1) {
+      markLine(originAtIndex ? originAtIndex(index) : undefined);
+      if (chunk[index] === "\n") {
+        generatedLine += 1;
+      }
+    }
+  };
+
+  const appendOriginal = (start, end) => {
+    appendText(text.slice(start, end), (index) => {
+      const position = positionFromOffset(lineStarts, start + index);
+      return {
+        sourcePath,
+        line: position.line + 1,
+        column: position.character + 1
+      };
+    });
+  };
+
+  appendText(prelude);
+  appendText("\n");
+
+  let offset = 0;
+  for (const insertion of [...insertions].sort((left, right) => left.offset - right.offset)) {
+    appendOriginal(offset, insertion.offset);
+    appendText(insertion.text, () => ({
+      sourcePath: insertion.probe.sourcePath,
+      line: insertion.probe.line,
+      column: insertion.probe.column
+    }));
+    offset = insertion.offset;
+  }
+
+  appendOriginal(offset, text.length);
+  appendText("\nQUIT;\n");
+
+  return lineMap;
 }
 
 function gapDebugPrelude(options = {}) {
