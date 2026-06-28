@@ -19,19 +19,19 @@ It supports `.g`, `.gap`, `.gd`, `.gi`, and `.tst` files and is designed for day
 
 ### Function Hovers
 
-![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/hover%20func.jpg)
+![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20func.jpg)
 
 ### User Doc Comments
 
-![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/doc%20comments.jpg)
+![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/doc%20comments.jpg)
 
 ### Record And Container Types
 
-![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/hover%20record.jpg)
+![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20record.jpg)
 
 ### GAP Debugging
 
-![Debugger](https://raw.githubusercontent.com/shencebebetterme/GAP_frontend/main/examples/debug.jpg)
+![Debugger](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/debug.jpg)
 
 ## Static Analysis
 

@@ -7,7 +7,7 @@
   "license": "GPL-2.0-or-later",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shencebebetterme/GAP_frontend.git"
+    "url": "https://github.com/shencebebetterme/GAP-Assistant.git"
   },
   "engines": {
     "vscode": "^1.90.0"
