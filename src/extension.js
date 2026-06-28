@@ -14,6 +14,8 @@ const IDENTIFIER_PATTERN = /[A-Za-z_][A-Za-z0-9_]*/;
 const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend(["function"], []);
 let activeLanguageServerClient;
 let activeDebugOutputChannel;
+let runtimeErrorDecorationType;
+let runtimeErrorDecorations = new Map();
 
 function activate(context) {
   let docs;
@@ -48,6 +50,7 @@ function activate(context) {
     vscode.debug.registerDebugConfigurationProvider("gap", new GapDebugConfigurationProvider()),
     vscode.languages.registerHoverProvider(GAP_SELECTOR, new GapHoverProvider(docs, analyzer, languageServerClient)),
     registerInlineValuesProvider(),
+    registerRuntimeErrorDecorationSupport(),
     vscode.languages.registerDocumentSemanticTokensProvider(
       GAP_SELECTOR,
       new GapSemanticTokensProvider(docs),
@@ -107,6 +110,105 @@ function registerInlineValuesProvider() {
     return { dispose() {} };
   }
   return vscode.languages.registerInlineValuesProvider(GAP_SELECTOR, new GapInlineValuesProvider());
+}
+
+function registerRuntimeErrorDecorationSupport() {
+  if (!vscode.window || typeof vscode.window.createTextEditorDecorationType !== "function") {
+    return { dispose() {} };
+  }
+
+  runtimeErrorDecorationType = vscode.window.createTextEditorDecorationType(runtimeErrorDecorationOptions());
+  const disposables = [runtimeErrorDecorationType];
+  if (vscode.debug && typeof vscode.debug.onDidReceiveDebugSessionCustomEvent === "function") {
+    disposables.push(vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+      if (event && event.event === "gapRuntimeError") {
+        showRuntimeErrorDecoration(event.body);
+      }
+    }));
+  }
+  if (vscode.debug && typeof vscode.debug.onDidStartDebugSession === "function") {
+    disposables.push(vscode.debug.onDidStartDebugSession(() => clearRuntimeErrorDecorations()));
+  }
+  if (vscode.debug && typeof vscode.debug.onDidTerminateDebugSession === "function") {
+    disposables.push(vscode.debug.onDidTerminateDebugSession(() => clearRuntimeErrorDecorations()));
+  }
+  if (typeof vscode.window.onDidChangeVisibleTextEditors === "function") {
+    disposables.push(vscode.window.onDidChangeVisibleTextEditors(() => applyRuntimeErrorDecorations()));
+  }
+  return vscode.Disposable && typeof vscode.Disposable.from === "function"
+    ? vscode.Disposable.from(...disposables)
+    : { dispose: () => disposables.forEach((disposable) => disposable && disposable.dispose && disposable.dispose()) };
+}
+
+function runtimeErrorDecorationOptions() {
+  return {
+    isWholeLine: true,
+    backgroundColor: "rgba(220, 38, 38, 0.18)",
+    border: "1px solid rgba(220, 38, 38, 0.72)",
+    overviewRulerColor: "rgba(220, 38, 38, 0.9)",
+    overviewRulerLane: vscode.OverviewRulerLane.Right
+  };
+}
+
+function showRuntimeErrorDecoration(body) {
+  const error = normalizeRuntimeErrorEvent(body);
+  if (!error) {
+    return;
+  }
+
+  const uri = vscode.Uri.file(error.sourcePath);
+  const range = new vscode.Range(
+    new vscode.Position(error.line - 1, Math.max(0, error.column - 1)),
+    new vscode.Position(error.line - 1, Math.max(0, error.column - 1))
+  );
+  runtimeErrorDecorations = new Map([
+    [uri.toString(), [
+      {
+        range,
+        hoverMessage: runtimeErrorHoverMessage(error)
+      }
+    ]]
+  ]);
+  applyRuntimeErrorDecorations();
+}
+
+function normalizeRuntimeErrorEvent(body) {
+  if (!body || !body.sourcePath || !Number.isInteger(body.line)) {
+    return undefined;
+  }
+  return {
+    sourcePath: String(body.sourcePath),
+    line: Math.max(1, body.line),
+    column: Number.isInteger(body.column) ? Math.max(1, body.column) : 1,
+    message: String(body.message || "GAP runtime error"),
+    details: String(body.details || "")
+  };
+}
+
+function runtimeErrorHoverMessage(error) {
+  const markdown = new vscode.MarkdownString(undefined, true);
+  markdown.appendMarkdown("**GAP runtime error**\n\n");
+  markdown.appendCodeblock(error.message, "text");
+  if (error.details && error.details !== error.message) {
+    markdown.appendMarkdown("\n\n**Details**\n\n");
+    markdown.appendCodeblock(error.details, "text");
+  }
+  return markdown;
+}
+
+function applyRuntimeErrorDecorations() {
+  if (!runtimeErrorDecorationType) {
+    return;
+  }
+  for (const editor of vscode.window.visibleTextEditors || []) {
+    const decorations = runtimeErrorDecorations.get(editor.document.uri.toString()) || [];
+    editor.setDecorations(runtimeErrorDecorationType, decorations);
+  }
+}
+
+function clearRuntimeErrorDecorations() {
+  runtimeErrorDecorations = new Map();
+  applyRuntimeErrorDecorations();
 }
 
 class GapHoverProvider {
@@ -886,7 +988,9 @@ module.exports = {
     debugCurrentFile,
     gapInlineValuesForDocument,
     groupEntries,
-    resolveManualFilePath
+    normalizeRuntimeErrorEvent,
+    resolveManualFilePath,
+    runtimeErrorDecorationOptions
   },
   activate,
   deactivate

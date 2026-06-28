@@ -35,6 +35,9 @@ class GapDebugAdapter {
     this.instrumentedPath = undefined;
     this.instrumentedRuntimePath = undefined;
     this.instrumentedLineMap = [];
+    this.pendingRuntimeError = undefined;
+    this.runtimeErrorTimer = undefined;
+    this.lastRuntimeError = undefined;
     this.errorPaused = false;
     this.started = false;
   }
@@ -87,6 +90,7 @@ class GapDebugAdapter {
         this.sendResponse(request, {
           supportsConfigurationDoneRequest: true,
           supportsEvaluateForHovers: true,
+          supportsExceptionInfoRequest: true,
           supportsTerminateRequest: true
         });
         this.sendEvent("initialized");
@@ -137,6 +141,10 @@ class GapDebugAdapter {
 
       case "evaluate":
         this.evaluate(request);
+        return;
+
+      case "exceptionInfo":
+        this.exceptionInfo(request);
         return;
 
       case "continue":
@@ -289,16 +297,18 @@ class GapDebugAdapter {
     const markerIndex = line.indexOf("__GAPDEBUG_");
     if (markerIndex < 0) {
       if (rawLine.length > 0) {
-        this.sendOutput(`${this.rewriteRuntimeOutput(rawLine)}\n`, "stdout");
-        this.maybePauseOnRuntimeError(line);
+        const rewritten = this.rewriteRuntimeOutput(rawLine);
+        this.sendOutput(`${rewritten}\n`, "stdout");
+        this.observeRuntimeOutputForError(this.rewriteRuntimeOutput(line));
       }
       return;
     }
 
     if (markerIndex > 0) {
       const prefix = line.slice(0, markerIndex);
-      this.sendOutput(this.rewriteRuntimeOutput(prefix), "stdout");
-      this.maybePauseOnRuntimeError(prefix);
+      const rewritten = this.rewriteRuntimeOutput(prefix);
+      this.sendOutput(rewritten, "stdout");
+      this.observeRuntimeOutputForError(rewritten);
     }
 
     const markerLine = line.slice(markerIndex);
@@ -359,42 +369,96 @@ class GapDebugAdapter {
     this.runtimeBuffer = "";
     const markerIndex = pending.replace(ANSI_RE, "").indexOf("__GAPDEBUG_");
     if (markerIndex < 0) {
-      this.sendOutput(this.rewriteRuntimeOutput(pending), "stdout");
-      this.maybePauseOnRuntimeError(pending.replace(ANSI_RE, ""));
+      const rewritten = this.rewriteRuntimeOutput(pending);
+      this.sendOutput(rewritten, "stdout");
+      this.observeRuntimeOutputForError(rewritten.replace(ANSI_RE, ""));
     }
   }
 
   handleRuntimeStderr(chunk) {
     const text = chunk.toString("utf8");
-    this.sendOutput(this.rewriteRuntimeOutput(text), "stderr");
-    this.maybePauseOnRuntimeError(text.replace(ANSI_RE, ""));
+    const rewritten = this.rewriteRuntimeOutput(text);
+    this.sendOutput(rewritten, "stderr");
+    this.observeRuntimeOutputForError(rewritten.replace(ANSI_RE, ""));
   }
 
   rewriteRuntimeOutput(output) {
     return rewriteInstrumentedLocations(output, [this.instrumentedRuntimePath, this.instrumentedPath], this.instrumentedLineMap);
   }
 
-  maybePauseOnRuntimeError(text) {
-    if (this.paused || this.errorPaused || !hasGapRuntimeError(text)) {
+  observeRuntimeOutputForError(text) {
+    if (this.paused || this.errorPaused) {
       return;
     }
 
+    for (const line of String(text || "").split(/\r?\n/)) {
+      if (!line && !this.pendingRuntimeError) {
+        continue;
+      }
+
+      if (!this.pendingRuntimeError) {
+        if (!hasGapRuntimeError(line)) {
+          continue;
+        }
+        this.pendingRuntimeError = createRuntimeErrorInfo(this.currentProbe, line);
+      } else if (line.trim()) {
+        this.pendingRuntimeError.lines.push(line.trimEnd());
+      }
+
+      if (isGapRuntimeErrorPrompt(line)) {
+        this.flushRuntimeErrorPause();
+        return;
+      }
+    }
+
+    if (this.pendingRuntimeError) {
+      this.scheduleRuntimeErrorPause();
+    }
+  }
+
+  scheduleRuntimeErrorPause() {
+    if (this.runtimeErrorTimer) {
+      clearTimeout(this.runtimeErrorTimer);
+    }
+    this.runtimeErrorTimer = setTimeout(() => {
+      this.runtimeErrorTimer = undefined;
+      this.flushRuntimeErrorPause();
+    }, 100);
+  }
+
+  flushRuntimeErrorPause() {
+    if (this.paused || this.errorPaused || !this.pendingRuntimeError) {
+      return;
+    }
+
+    if (this.runtimeErrorTimer) {
+      clearTimeout(this.runtimeErrorTimer);
+      this.runtimeErrorTimer = undefined;
+    }
+
+    const errorInfo = finalizeRuntimeErrorInfo(this.pendingRuntimeError);
+    this.pendingRuntimeError = undefined;
+    this.lastRuntimeError = errorInfo;
     this.paused = true;
     this.errorPaused = true;
     this.pauseRequested = false;
     this.stepMode = undefined;
 
-    const location = this.currentProbe && this.currentProbe.sourcePath && this.currentProbe.line
-      ? `${this.currentProbe.sourcePath}:${this.currentProbe.line}`
-      : undefined;
-    if (location) {
-      this.sendOutput(`GAP debugger paused on error near ${location}\n`, "stderr");
+    if (errorInfo.location) {
+      this.sendOutput(`GAP debugger paused on error near ${errorInfo.location}\n`, "stderr");
     }
 
+    this.sendEvent("gapRuntimeError", {
+      sourcePath: errorInfo.sourcePath,
+      line: errorInfo.line,
+      column: errorInfo.column,
+      message: errorInfo.message,
+      details: errorInfo.details
+    });
     this.sendEvent("stopped", {
       reason: "exception",
       description: "GAP error",
-      text: location ? `GAP error near ${location}` : "GAP error",
+      text: runtimeErrorPopupText(errorInfo),
       threadId: THREAD_ID,
       allThreadsStopped: true
     });
@@ -409,6 +473,8 @@ class GapDebugAdapter {
     const shouldStop = Boolean(firstStop || shouldStep || breakpoint || this.pauseRequested);
 
     this.currentProbe = { ...probe, ...hit };
+    this.pendingRuntimeError = undefined;
+    this.lastRuntimeError = undefined;
     this.errorPaused = false;
     const variableScopes = new Map((probe.variables || []).map((variable) => [variable.name, variable.scope || "local"]));
     this.currentVariables = new Map((hit.variables || []).map((variable) => [
@@ -534,6 +600,28 @@ class GapDebugAdapter {
     });
   }
 
+  exceptionInfo(request) {
+    const errorInfo = this.lastRuntimeError;
+    if (!errorInfo) {
+      this.sendResponse(request, {
+        exceptionId: "GAP error",
+        breakMode: "always"
+      });
+      return;
+    }
+
+    this.sendResponse(request, {
+      exceptionId: "GAP runtime error",
+      description: runtimeErrorPopupText(errorInfo),
+      breakMode: "always",
+      details: {
+        message: errorInfo.message,
+        typeName: "GAP runtime error",
+        stackTrace: errorInfo.details
+      }
+    });
+  }
+
   resume(request, stepKind) {
     this.sendResponse(request, {
       allThreadsContinued: true
@@ -551,6 +639,7 @@ class GapDebugAdapter {
 
     const wasErrorPaused = this.errorPaused;
     this.paused = false;
+    this.lastRuntimeError = wasErrorPaused ? this.lastRuntimeError : undefined;
     this.errorPaused = false;
     this.stepMode = wasErrorPaused ? undefined : stepMode;
     this.writeRuntimeCommand(wasErrorPaused ? "quit;" : "__GAPDEBUG_CONTINUE__");
@@ -637,6 +726,12 @@ class GapDebugAdapter {
   }
 
   cleanupTempDir() {
+    if (this.runtimeErrorTimer) {
+      clearTimeout(this.runtimeErrorTimer);
+      this.runtimeErrorTimer = undefined;
+    }
+    this.pendingRuntimeError = undefined;
+
     if (!this.tempDir) {
       return;
     }
@@ -727,8 +822,84 @@ function rewriteInstrumentedLocations(output, instrumentedPaths, lineMap) {
   return rewritten;
 }
 
+function createRuntimeErrorInfo(currentProbe, firstLine) {
+  const sourcePath = currentProbe && currentProbe.sourcePath;
+  const line = currentProbe && currentProbe.line;
+  const column = currentProbe && currentProbe.column || 1;
+  return {
+    sourcePath,
+    line,
+    column,
+    location: sourcePath && line ? `${sourcePath}:${line}` : undefined,
+    lines: [String(firstLine || "").trimEnd()]
+  };
+}
+
+function finalizeRuntimeErrorInfo(errorInfo) {
+  const lines = (errorInfo.lines || [])
+    .map((line) => String(line || "").trimEnd())
+    .filter(Boolean);
+  const message = extractRuntimeErrorMessage(lines);
+  const details = compactRuntimeErrorDetails(lines, errorInfo.location);
+  return {
+    ...errorInfo,
+    lines,
+    message,
+    details
+  };
+}
+
+function extractRuntimeErrorMessage(lines) {
+  const index = lines.findIndex((line) => hasGapRuntimeError(line));
+  if (index < 0) {
+    return "GAP runtime error";
+  }
+
+  const messageLines = [lines[index].trim()];
+  for (const line of lines.slice(index + 1)) {
+    const trimmed = line.trim();
+    if (!trimmed || /^(func\(|<function|called from|type 'quit;')/.test(trimmed)) {
+      break;
+    }
+    messageLines.push(trimmed);
+  }
+  return messageLines.join("\n");
+}
+
+function compactRuntimeErrorDetails(lines, location) {
+  const relevant = lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^type 'quit;'/.test(line));
+  if (location && !relevant.some((line) => line.includes(location))) {
+    relevant.push(`Original source: ${location}`);
+  }
+  return relevant.slice(0, 10).join("\n");
+}
+
+function runtimeErrorPopupText(errorInfo) {
+  const pieces = [errorInfo.message];
+  if (errorInfo.location) {
+    pieces.push(`Location: ${errorInfo.location}`);
+  }
+  if (errorInfo.details) {
+    const detailLines = errorInfo.details
+      .split(/\n/)
+      .filter((line) => line && line !== errorInfo.message && !line.startsWith("Original source:"))
+      .slice(0, 4);
+    if (detailLines.length > 0) {
+      pieces.push(detailLines.join("\n"));
+    }
+  }
+  return pieces.filter(Boolean).join("\n");
+}
+
 function hasGapRuntimeError(text) {
   return /(^|\n)Error[,:\s]/.test(String(text || ""));
+}
+
+function isGapRuntimeErrorPrompt(text) {
+  return /type 'quit;' to quit to outer loop/.test(String(text || ""));
 }
 
 function escapeRegExp(value) {

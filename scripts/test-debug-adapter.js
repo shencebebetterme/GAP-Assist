@@ -62,9 +62,11 @@ unitAdapter.currentProbe = {
   sourcePath: "C:\\Users\\Ce\\Documents\\codex_playground\\GAP_frontend\\examples\\sample.g",
   line: 71
 };
-unitAdapter.maybePauseOnRuntimeError("Error, <expr> must be 'true' or 'false'");
+unitAdapter.observeRuntimeOutputForError("Error, <expr> must be 'true' or 'false'\ncalled from sample.g:71\ntype 'quit;' to quit to outer loop");
 assert.strictEqual(unitAdapter.paused, true, "adapter should return to a paused state after a GAP runtime error");
 assert(unitAdapterOutput.join("").includes("\"reason\":\"exception\""), "adapter should send a stopped exception event after a GAP runtime error");
+assert(unitAdapterOutput.join("").includes("gapRuntimeError"), "adapter should send a custom GAP runtime error event for editor decoration");
+assert(unitAdapterOutput.join("").includes("<expr> must be"), "adapter stopped event should include the GAP error message");
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-adapter-test-"));
 const program = path.join(tempDir, "sample.g");
@@ -178,6 +180,7 @@ async function main() {
   const initializeResponse = await waitForResponse("initialize", initializeSeq);
   assert.strictEqual(initializeResponse.success, true, "initialize should succeed");
   assert.strictEqual(initializeResponse.body.supportsEvaluateForHovers, true, "adapter should advertise hover evaluation");
+  assert.strictEqual(initializeResponse.body.supportsExceptionInfoRequest, true, "adapter should advertise exception info support");
   await waitForEvent("initialized");
 
   const launchSeq = send("launch", {
@@ -341,6 +344,7 @@ async function main() {
   await waitForResponse("continue", continueSeq);
   const errorStopped = await waitForEvent("stopped", errorEventStart);
   assert.strictEqual(errorStopped.body.reason, "exception", "adapter should pause again when GAP reports a runtime error");
+  assert(errorStopped.body.text.includes("Error,"), "runtime error stopped popup should include the GAP error message");
 
   const errorStackSeq = send("stackTrace", {
     threadId: 1
@@ -354,6 +358,20 @@ async function main() {
   });
   const errorGlobals = await waitForResponse("variables", errorGlobalsSeq);
   assert(errorGlobals.body.variables.some((variable) => variable.name === "w" && variable.value === "4"), "runtime error pause should preserve the previous captured variable values");
+  const gapErrorEvent = await waitFor(
+    (message) => message.type === "event" && message.event === "gapRuntimeError",
+    "custom GAP runtime error event",
+    15000,
+    errorEventStart
+  );
+  assert.strictEqual(gapErrorEvent.body.line, 11, "custom GAP runtime error event should report the original source line");
+  assert(gapErrorEvent.body.message.includes("Error,"), "custom GAP runtime error event should include the GAP error message");
+  const exceptionInfoSeq = send("exceptionInfo", {
+    threadId: 1
+  });
+  const exceptionInfo = await waitForResponse("exceptionInfo", exceptionInfoSeq);
+  assert(exceptionInfo.body.description.includes("Location:"), "exception info should include the original source location");
+  assert(exceptionInfo.body.details.stackTrace.includes("ForAll"), "exception info should include GAP stack details");
   await waitFor(
     (message) => message.type === "event" && message.event === "output" && String(message.body.output).includes(`${program}:11`),
     "remapped runtime error source location",

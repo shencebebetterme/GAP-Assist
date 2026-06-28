@@ -7,6 +7,12 @@ const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
   if (request === "vscode") {
     return {
+      Disposable: {
+        from: (...items) => ({ dispose: () => items.forEach((item) => item && item.dispose && item.dispose()) })
+      },
+      OverviewRulerLane: {
+        Right: 4
+      },
       SemanticTokensLegend: class SemanticTokensLegend {},
       SemanticTokensBuilder: class SemanticTokensBuilder {
         build() {
@@ -65,6 +71,9 @@ Module._load = function patchedLoad(request, parent, isMain) {
         breakpoints: [],
         registerDebugAdapterDescriptorFactory: () => ({ dispose() {} }),
         registerDebugConfigurationProvider: () => ({ dispose() {} }),
+        onDidReceiveDebugSessionCustomEvent: () => ({ dispose() {} }),
+        onDidStartDebugSession: () => ({ dispose() {} }),
+        onDidTerminateDebugSession: () => ({ dispose() {} }),
         startDebugging: async () => true
       },
       languages: {
@@ -73,12 +82,15 @@ Module._load = function patchedLoad(request, parent, isMain) {
         registerInlineValuesProvider: () => ({ dispose() {} })
       },
       window: {
+        createTextEditorDecorationType: () => ({ dispose() {} }),
         createOutputChannel: () => ({
           appendLine: () => undefined,
           dispose: () => undefined,
           show: () => undefined
         }),
         activeTextEditor: undefined,
+        visibleTextEditors: [],
+        onDidChangeVisibleTextEditors: () => ({ dispose() {} }),
         showErrorMessage: () => undefined,
         showWarningMessage: () => undefined
       },
@@ -158,6 +170,27 @@ after := 0;
     multilineInlineValues.map((value) => `${value.variableName}@${value.range.start.line}`),
     ["left@1", "right@2", "sum@5"],
     "inline values should place active function parameters on their own lines and still skip function definitions"
+  );
+
+  const decorationOptions = extension.__test.runtimeErrorDecorationOptions();
+  assert.strictEqual(decorationOptions.isWholeLine, true, "runtime error decoration should highlight the whole line");
+  assert(String(decorationOptions.backgroundColor).includes("220, 38, 38"), "runtime error decoration should use a red highlight");
+  assert.deepStrictEqual(
+    extension.__test.normalizeRuntimeErrorEvent({
+      sourcePath: "C:\\sample.g",
+      line: 7,
+      column: 3,
+      message: "Error, bad value",
+      details: "called from sample.g:7"
+    }),
+    {
+      sourcePath: "C:\\sample.g",
+      line: 7,
+      column: 3,
+      message: "Error, bad value",
+      details: "called from sample.g:7"
+    },
+    "runtime error decoration events should normalize source location and details"
   );
 } finally {
   Module._load = originalLoad;

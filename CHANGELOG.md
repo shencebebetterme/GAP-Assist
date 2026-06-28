@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.36
+
+- Added a red whole-line editor highlight for GAP runtime errors.
+- Expanded GAP exception popup details with the runtime error message, source location, and stack context.
+
 ## 0.3.35
 
 - Kept the GAP debugger paused on runtime errors so inline values and variable scopes remain available.
