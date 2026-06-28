@@ -24,7 +24,7 @@ function activate(context) {
     docs = loadDocumentation(context.extensionPath);
     declarations = loadDeclarations(context.extensionPath);
   } catch (error) {
-    vscode.window.showWarningMessage(`GAP Assistant could not load language data: ${error.message}`);
+    vscode.window.showWarningMessage(`GAP Assist could not load language data: ${error.message}`);
     return;
   }
 
@@ -755,7 +755,7 @@ async function openLocalManual(context, docs, target) {
   const config = vscode.workspace.getConfiguration("gapReference");
   const filePath = resolveManualFilePath(config, docs, target);
   if (!filePath) {
-    vscode.window.showWarningMessage("GAP Assistant has no configured GAP installation or manual path.");
+    vscode.window.showWarningMessage("GAP Assist has no configured GAP installation or manual path.");
     return;
   }
 

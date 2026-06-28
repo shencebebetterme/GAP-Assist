@@ -1,6 +1,6 @@
-# GAP Assistant
+# GAP Assist
 
-GAP Assistant brings syntax highlighting, static analysis, and debugging to GAP source files in VS Code.
+GAP Assist brings syntax highlighting, static analysis, and debugging to GAP source files in VS Code.
 
 
 ## What it includes
@@ -20,26 +20,26 @@ GAP Assistant brings syntax highlighting, static analysis, and debugging to GAP 
 ### Mouse Hovers
 on GAP functions
 
-![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20func.jpg)
+![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assist/main/examples/hover%20func.jpg)
 
 on user-defined functions
 
-![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/doc%20comments.jpg)
+![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assist/main/examples/doc%20comments.jpg)
 
 on records and lists
 
-![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20record.jpg)
+![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assist/main/examples/hover%20record.jpg)
 
 ### Static Analysis
-![Static analysis](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/static%20analysis.jpg)
+![Static analysis](https://raw.githubusercontent.com/shencebebetterme/GAP-Assist/main/examples/static%20analysis.jpg)
 
 ### GAP Debugging
 
-![Debugger](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/debug.jpg)
+![Debugger](https://raw.githubusercontent.com/shencebebetterme/GAP-Assist/main/examples/debug.jpg)
 
 ## Static Analysis
 
-GAP Assistant models values by GAP filters rather than by a single OO-style type. For example, `SymmetricGroup(4)` is inferred as a group satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`.
+GAP Assist models values by GAP filters rather than by a single OO-style type. For example, `SymmetricGroup(4)` is inferred as a group satisfying filters such as `IsGroup`, `IsPermGroup`, and `IsFinite`.
 
 The analyzer understands common GAP forms:
 
@@ -204,4 +204,4 @@ If your Marketplace publisher ID is not `shencebebetterme`, update the `publishe
 
 ## Notes
 
-GAP Assistant is a static helper and debugger integration. It does not replace GAP's own parser, evaluator, library, or method selection. Runtime debugging uses an instrumented temporary copy of the current file, so stepping is focused on user `.g` statements rather than GAP kernel internals.
+GAP Assist is a static helper and debugger integration. It does not replace GAP's own parser, evaluator, library, or method selection. Runtime debugging uses an instrumented temporary copy of the current file, so stepping is focused on user `.g` statements rather than GAP kernel internals.

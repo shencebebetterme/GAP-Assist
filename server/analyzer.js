@@ -1959,7 +1959,7 @@ function reportDiagnostic(data, offset, length, message, options = {}) {
 
   data.diagnostics.push({
     severity: options.severity || 1,
-    source: "gap-assistant",
+    source: "gap-assist",
     code: options.code || "operator-type",
     message,
     range: {

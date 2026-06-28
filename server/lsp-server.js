@@ -52,7 +52,7 @@ function handleMessage(message) {
         hoverProvider: true
       },
       serverInfo: {
-        name: "gap-assistant-language-server",
+        name: "gap-assist-language-server",
         version: "0.4.1"
       }
     });

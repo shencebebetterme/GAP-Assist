@@ -1,6 +1,6 @@
 {
-  "name": "gap-assistant",
-  "displayName": "GAP Assistant",
+  "name": "gap-assist",
+  "displayName": "GAP Assist",
   "description": "Language intelligence, reference hovers, static analysis, and debugging for GAP.",
   "version": "0.4.1",
   "publisher": "shencebebetterme",
@@ -8,7 +8,7 @@
   "icon": "assets/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shencebebetterme/GAP-Assistant.git"
+    "url": "https://github.com/shencebebetterme/GAP-Assist.git"
   },
   "engines": {
     "vscode": "^1.90.0"
@@ -177,7 +177,7 @@
       ]
     },
     "configuration": {
-      "title": "GAP Assistant",
+      "title": "GAP Assist",
       "properties": {
         "gapReference.gapInstallationPath": {
           "type": "string",

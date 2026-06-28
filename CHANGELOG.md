@@ -2,11 +2,11 @@
 
 ## 0.4.1
 
-- Added the GAP Assistant extension icon for Marketplace and VS Code extension views.
+- Added the GAP Assist extension icon for Marketplace and VS Code extension views.
 
 ## 0.4.0
 
-- Renamed the extension to GAP Assistant for Marketplace publication.
+- Renamed the extension to GAP Assist for Marketplace publication.
 - Accepted GAP permutation multiplication such as `perm1 * perm2` in static operator analysis.
 - Colored GAP word operators such as `and`, `or`, and `not` with the regular keyword scope.
 - Removed generated local installation paths from packaged documentation/declaration data.
