@@ -1,33 +1,37 @@
 # GAP Assistant
 
-GAP Assistant brings editor support, reference hovers, static analysis, and debugging to GAP source files in VS Code.
+GAP Assistant brings syntax highlighting, static analysis, and debugging to GAP source files in VS Code.
 
-It supports `.g`, `.gap`, `.gd`, `.gi`, and `.tst` files and is designed for day-to-day work with GAP scripts, package code, examples, and exploratory algebra computations.
 
-## Highlights
+## What it includes
 
-- GAP syntax highlighting for comments, strings, characters, numbers, keywords, declarations, operators, function calls, and inferred hover type snippets.
-- Semantic highlighting for documented GAP reference and package symbols.
-- Reference manual hovers generated from the GAP manual and installed package manuals, with grouped signatures, examples, and local manual links.
-- Static inference hovers for globals, locals, user functions, return values, records, lists, callback parameters, and container element types.
-- User `##` doc-comment hovers for functions, including `@param` and `@returns`.
-- Static diagnostics for likely GAP runtime errors, including invalid operators, non-boolean conditions, unsafe selectors, incompatible calls, unassigned locals, and callback predicate mistakes.
-- Filter-aware reasoning for GAP objects, preserving facts such as `IsGroup`, `IsPermGroup`, `IsList`, `IsPerm`, and `IsMultiplicativeElementWithInverse`.
-- A VS Code debugger for `.g` files with breakpoints, statement stepping, variables, hover/watch values, inline values, and mapped runtime errors.
+- **GAP syntax highlighting** for keywords, declarations, functions for GAP reference and all the official packages.
+- A **VS Code debugger** for `.g` files with breakpoints, statement stepping, variables, hover/watch values, inline values, and mapped runtime errors.
+- **Intellisense**
+  - **Static inference** for globals, locals, user functions, return values, records, lists, callback parameters, and container element types.
+  - **Static diagnostics** for likely GAP runtime errors, including invalid operators, non-boolean conditions, unsafe selectors, incompatible calls, unassigned locals, and callback predicate mistakes.
+  - **Filter-aware reasoning** for GAP objects, preserving facts such as `IsGroup`, `IsPermGroup`, `IsList`, `IsPerm`, and `IsMultiplicativeElementWithInverse`.
+- **Mouse hover info** 
+  - Reference manual generated from the GAP manual and installed package manuals, with grouped signatures, examples, and local manual links.
+  - User `##` doc-comment hovers for user-defined functions, including `@param` and `@returns`.
 
 ## Screenshots
 
-### Function Hovers
+### Mouse Hovers
+on GAP functions
 
 ![Function hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20func.jpg)
 
-### User Doc Comments
+on user-defined functions
 
 ![Doc comment hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/doc%20comments.jpg)
 
-### Record And Container Types
+on records and lists
 
 ![Record hover](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/hover%20record.jpg)
+
+### Static Analysis
+![Static analysis](https://raw.githubusercontent.com/shencebebetterme/GAP-Assistant/main/examples/static%20analysis.jpg)
 
 ### GAP Debugging
 
