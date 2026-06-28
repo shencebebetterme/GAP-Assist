@@ -7,6 +7,10 @@ const { GapLanguageServerClient } = require("../src/lspClient");
 const root = path.resolve(__dirname, "..");
 const serverPath = path.join(root, "server", "lsp-server.js");
 
+function hasHoverToken(markdown, value) {
+  return markdown.includes(`>${value}</span>`);
+}
+
 function createDocument(uri, languageId, version, getText) {
   return {
     uri: {
@@ -45,34 +49,34 @@ async function main() {
 
     const document = createDocument("memory://client-test.g", "gap", 1, () => text);
     const groupHover = await client.hover(document, { line: 0, character: 1 });
-    assert(groupHover.contents.value.includes("<code>G</code>"), "client hover should return server inference for variables");
-    assert(groupHover.contents.value.includes("<strong>symmetric permutation group</strong>"), "client hover should style inferred group types");
+    assert(hasHoverToken(groupHover.contents.value, "G"), "client hover should return server inference for variables");
+    assert(hasHoverToken(groupHover.contents.value, "symmetric permutation group"), "client hover should style inferred group types");
     assert(!groupHover.contents.value.includes("Source:"), "client hover should not include internal source lines");
 
     const operatorHover = await client.hover(document, { line: 2, character: 1 });
-    assert(operatorHover.contents.value.includes("<code>m</code>"), "client hover should infer integer arithmetic");
-    assert(operatorHover.contents.value.includes("<strong>integer</strong>"), "client hover should style integer arithmetic");
+    assert(hasHoverToken(operatorHover.contents.value, "m"), "client hover should infer integer arithmetic");
+    assert(hasHoverToken(operatorHover.contents.value, "integer"), "client hover should style integer arithmetic");
 
     const stringHover = await client.hover(document, { line: 3, character: 1 });
-    assert(stringHover.contents.value.includes("<code>str</code>"), "client hover should infer string assignments");
-    assert(stringHover.contents.value.includes("<strong>string</strong>"), "client hover should style string assignments");
+    assert(hasHoverToken(stringHover.contents.value, "str"), "client hover should infer string assignments");
+    assert(hasHoverToken(stringHover.contents.value, "string"), "client hover should style string assignments");
 
     const gensHover = await client.hover(document, { line: 4, character: 1 });
-    assert(gensHover.contents.value.includes("<code>gens</code>"), "client hover should return server inference for globals");
-    assert(gensHover.contents.value.includes("<strong>list of group generators</strong>"), "client hover should style global container type");
-    assert(gensHover.contents.value.includes("<strong>group element</strong>"), "client hover should style global container element type");
-    assert(!gensHover.contents.value.includes("element:"), "client hover should omit verbose container structure rows");
+    assert(hasHoverToken(gensHover.contents.value, "gens"), "client hover should return server inference for globals");
+    assert(hasHoverToken(gensHover.contents.value, "list of group generators"), "client hover should style global container type");
+    assert(hasHoverToken(gensHover.contents.value, "group element"), "client hover should style global container element type");
+    assert(hasHoverToken(gensHover.contents.value, "element"), "client hover should include the container element row");
 
     const localHover = await client.hover(document, { line: 7, character: 6 });
-    assert(localHover.contents.value.includes("<code>values</code>"), "client hover should return server inference for local variables");
-    assert(localHover.contents.value.includes("<strong>list</strong>"), "client hover should style local container type");
-    assert(localHover.contents.value.includes("<strong>positive integer</strong>"), "client hover should style local container element type");
+    assert(hasHoverToken(localHover.contents.value, "values"), "client hover should return server inference for local variables");
+    assert(hasHoverToken(localHover.contents.value, "list"), "client hover should style local container type");
+    assert(hasHoverToken(localHover.contents.value, "positive integer"), "client hover should style local container element type");
 
     const functionHover = await client.hover(document, { line: 10, character: 1 });
-    assert(functionHover.contents.value.includes("symbolIcon-functionForeground"), "client hover should return a highlighted function signature");
-    assert(functionHover.contents.value.includes("<code>obj</code>"), "client hover should include the parameter name");
-    assert(functionHover.contents.value.includes("<strong>list or collection</strong>"), "client hover should style body-derived function input requirement");
-    assert(!functionHover.contents.value.includes("<strong>permutation group</strong>"), "client hover should not narrow requirements to one call-site type");
+    assert(functionHover.contents.value.includes("vscode-charts-purple"), "client hover should return a highlighted function signature");
+    assert(hasHoverToken(functionHover.contents.value, "obj"), "client hover should include the parameter name");
+    assert(hasHoverToken(functionHover.contents.value, "list or collection"), "client hover should style body-derived function input requirement");
+    assert(!functionHover.contents.value.includes("permutation group"), "client hover should not narrow requirements to one call-site type");
     assert(!functionHover.contents.value.includes("Input filters"), "client hover should not repeat function input filters");
     assert(!functionHover.contents.value.includes("Confidence:"), "client hover should not include confidence lines");
 
@@ -80,9 +84,9 @@ async function main() {
     document.version = 2;
 
     const updatedHover = await client.hover(document, { line: 0, character: 1 });
-    assert(updatedHover.contents.value.includes("<code>G</code>"), "client should synchronize changed documents");
-    assert(updatedHover.contents.value.includes("<strong>list</strong>"), "client should synchronize changed documents");
-    assert(updatedHover.contents.value.includes("<strong>integer</strong>"), "client should synchronize changed documents");
+    assert(hasHoverToken(updatedHover.contents.value, "G"), "client should synchronize changed documents");
+    assert(hasHoverToken(updatedHover.contents.value, "list"), "client should synchronize changed documents");
+    assert(hasHoverToken(updatedHover.contents.value, "integer"), "client should synchronize changed documents");
   } finally {
     await client.dispose();
   }

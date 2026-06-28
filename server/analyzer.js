@@ -7,10 +7,14 @@ const TERMINATING_CALLS = new Set(["ErrorNoReturn", "TryNextMethod"]);
 const HOVER_WRAP_COLUMN = 88;
 const MAX_HOVER_FIELDS = 8;
 const HOVER_SIGNATURE_STYLE = "font-family: var(--vscode-editor-font-family); line-height: 1.45;";
+const HOVER_DETAIL_STYLE = "font-family: var(--vscode-editor-font-family); line-height: 1.45; margin-top: 0.45em;";
+const HOVER_DOC_STYLE = "font-family: var(--vscode-editor-font-family); line-height: 1.45; margin-top: 0.55em; color: var(--vscode-descriptionForeground);";
 const HOVER_META_STYLE = "color: var(--vscode-descriptionForeground);";
-const HOVER_KEYWORD_STYLE = "color: var(--vscode-symbolIcon-functionForeground, var(--vscode-textLink-foreground));";
+const HOVER_KEYWORD_STYLE = "color: var(--vscode-charts-purple, #af00db);";
+const HOVER_IDENTIFIER_STYLE = "color: var(--vscode-charts-orange, #b15c00);";
 const HOVER_OPERATOR_STYLE = "color: var(--vscode-symbolIcon-operatorForeground, var(--vscode-foreground));";
-const HOVER_TYPE_STYLE = "color: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-textLink-foreground)); font-weight: 600;";
+const HOVER_TYPE_STYLE = "color: var(--vscode-charts-blue, #007acc);";
+const HOVER_FIELD_STYLE = "color: var(--vscode-charts-yellow, #795e26);";
 
 const HARD_CODED_CALLS = {
   AlternatingGroup: callType("alternating permutation group", ["IsObject", "IsCollection", "IsMagma", "IsGroup", "IsPermGroup", "IsFinite"], "constructor"),
@@ -3335,7 +3339,9 @@ function formatInferenceMarkdown(hover) {
     appendCompactFunctionDocumentation(lines, symbol.documentation || (type && type.documentation));
   } else {
     lines.push(htmlLine(`${identifierToken(displayName)}: ${formatTypeHtml(type)}`));
-    lines.push("</div>", "");
+    lines.push("</div>");
+    appendCompactStructureDetails(lines, type);
+    lines.push("");
   }
 
   return trimBlankLines(lines).join("\n");
@@ -3418,16 +3424,31 @@ function appendCompactFunctionDocumentation(lines, documentation) {
     return;
   }
 
-  lines.push("");
+  lines.push(`<div style="${HOVER_DOC_STYLE}">`);
   for (const line of summary) {
-    lines.push(escapeMarkdown(line));
+    lines.push(htmlLine(htmlEscape(line)));
   }
   for (const parameter of params) {
-    lines.push(`@param ${identifierToken(parameter.name)} ${escapeMarkdown(parameter.text || "")}`.trimEnd());
+    const text = parameter.text ? ` ${htmlEscape(parameter.text)}` : "";
+    lines.push(htmlLine(`${docLabel("@param")} ${identifierToken(parameter.name)}${text}`));
   }
   for (const item of returns) {
-    lines.push(`@returns ${escapeMarkdown(item)}`);
+    lines.push(htmlLine(`${docLabel("@returns")} ${htmlEscape(item)}`));
   }
+  lines.push("</div>");
+}
+
+function appendCompactStructureDetails(lines, type) {
+  const rows = formatCompactStructureRows(type);
+  if (rows.length === 0) {
+    return;
+  }
+
+  lines.push(`<div style="${HOVER_DETAIL_STYLE}">`);
+  for (const row of rows) {
+    lines.push(htmlLine(row));
+  }
+  lines.push("</div>");
 }
 
 function appendParameterDetails(lines, params) {
@@ -3538,6 +3559,28 @@ function formatStructureLines(type) {
   return lines;
 }
 
+function formatCompactStructureRows(type) {
+  if (!type) {
+    return [];
+  }
+
+  const rows = [];
+  if (type.element) {
+    rows.push(`${memberToken("element")}: ${formatTypeHtml(type.element)}`);
+  }
+  if (type.fields) {
+    const fieldEntries = Object.entries(type.fields).slice(0, MAX_HOVER_FIELDS);
+    for (const [name, fieldType] of fieldEntries) {
+      rows.push(`${memberToken(`.${name}`)}: ${formatTypeHtml(fieldType)}`);
+    }
+    const remaining = Object.keys(type.fields).length - fieldEntries.length;
+    if (remaining > 0) {
+      rows.push(`<span style="${HOVER_META_STYLE}">${remaining} more fields</span>`);
+    }
+  }
+  return rows;
+}
+
 function scopeLabel(scope) {
   if (scope === "documented global") {
     return "system";
@@ -3565,11 +3608,11 @@ function htmlIndent(count) {
 }
 
 function identifierToken(value) {
-  return `<code>${htmlEscape(value)}</code>`;
+  return styledToken(value, HOVER_IDENTIFIER_STYLE);
 }
 
 function keywordToken(value) {
-  return `<code style="${HOVER_KEYWORD_STYLE}">${htmlEscape(value)}</code>`;
+  return styledToken(value, HOVER_KEYWORD_STYLE);
 }
 
 function operatorToken(value) {
@@ -3577,7 +3620,19 @@ function operatorToken(value) {
 }
 
 function typeToken(value) {
-  return `<code style="${HOVER_TYPE_STYLE}"><strong>${htmlEscape(value)}</strong></code>`;
+  return styledToken(value, HOVER_TYPE_STYLE);
+}
+
+function memberToken(value) {
+  return styledToken(value, HOVER_FIELD_STYLE);
+}
+
+function docLabel(value) {
+  return styledToken(value, HOVER_KEYWORD_STYLE);
+}
+
+function styledToken(value, style) {
+  return `<span style="${style}">${htmlEscape(value)}</span>`;
 }
 
 function htmlEscape(value) {

@@ -11,6 +11,10 @@ const server = childProcess.spawn(process.execPath, [serverPath], {
   stdio: ["pipe", "pipe", "pipe"]
 });
 
+function hasHoverToken(markdown, value) {
+  return markdown.includes(`>${value}</span>`);
+}
+
 const responses = [];
 let buffer = Buffer.alloc(0);
 
@@ -141,8 +145,8 @@ async function main() {
   });
 
   const hover = await waitForResponse(2);
-  assert(hover.result.contents.value.includes("<code>G</code>"), "hover should include inferred GAP symbol");
-  assert(hover.result.contents.value.includes("<strong>symmetric permutation group</strong>"), "hover should include styled inferred GAP type");
+  assert(hasHoverToken(hover.result.contents.value, "G"), "hover should include inferred GAP symbol");
+  assert(hasHoverToken(hover.result.contents.value, "symmetric permutation group"), "hover should include styled inferred GAP type");
   assert(!hover.result.contents.value.includes("GAP inference"), "hover should omit the verbose inference title");
   assert(!hover.result.contents.value.includes("Source:"), "hover should not include internal source lines");
   assert(!hover.result.contents.value.includes("Confidence:"), "hover should not include confidence lines");
@@ -162,8 +166,8 @@ async function main() {
   });
 
   const stringHover = await waitForResponse(4);
-  assert(stringHover.result.contents.value.includes("<code>str</code>"), "hover should infer string literal assignments");
-  assert(stringHover.result.contents.value.includes("<strong>string</strong>"), "hover should style string literal types");
+  assert(hasHoverToken(stringHover.result.contents.value, "str"), "hover should infer string literal assignments");
+  assert(hasHoverToken(stringHover.result.contents.value, "string"), "hover should style string literal types");
   assert(!stringHover.result.contents.value.includes("IsString"), "hover should not repeat string filters");
 
   send({
@@ -181,8 +185,8 @@ async function main() {
   });
 
   const sizeHover = await waitForResponse(6);
-  assert(sizeHover.result.contents.value.includes("symbolIcon-functionForeground"), "hover signature should style the function keyword");
-  assert(sizeHover.result.contents.value.includes("<strong>list or collection</strong>"), "hover signature should include styled Size input type");
+  assert(sizeHover.result.contents.value.includes("vscode-charts-purple"), "hover signature should style the function keyword");
+  assert(hasHoverToken(sizeHover.result.contents.value, "list or collection"), "hover signature should include styled Size input type");
   assert(!sizeHover.result.contents.value.includes("Input filters"), "hover should not repeat declaration input filters");
 
   send({
@@ -200,10 +204,10 @@ async function main() {
   });
 
   const functionHover = await waitForResponse(5);
-  assert(functionHover.result.contents.value.includes("symbolIcon-functionForeground"), "function hover should include a styled function signature");
-  assert(functionHover.result.contents.value.includes("<code>obj</code>"), "function hover should include the parameter name");
-  assert(functionHover.result.contents.value.includes("<strong>list or collection</strong>"), "function hover should include body-derived input requirement in the signature");
-  assert(!functionHover.result.contents.value.includes("<strong>permutation group</strong>"), "function hover should not narrow requirements to one call-site type");
+  assert(functionHover.result.contents.value.includes("vscode-charts-purple"), "function hover should include a styled function signature");
+  assert(hasHoverToken(functionHover.result.contents.value, "obj"), "function hover should include the parameter name");
+  assert(hasHoverToken(functionHover.result.contents.value, "list or collection"), "function hover should include body-derived input requirement in the signature");
+  assert(!functionHover.result.contents.value.includes("permutation group"), "function hover should not narrow requirements to one call-site type");
   assert(!functionHover.result.contents.value.includes("Source:"), "function hover should not include internal source lines");
 
   send({ id: 3, method: "shutdown", params: null });

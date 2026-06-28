@@ -10,6 +10,14 @@ const docs = loadDocumentation(root);
 const declarations = loadDeclarations(root);
 const analyzer = new GapAnalyzer(docs, declarations);
 
+function hasHoverToken(markdown, value) {
+  return markdown.includes(`>${value}</span>`);
+}
+
+function assertHoverToken(markdown, value, message) {
+  assert(hasHoverToken(markdown, value), message);
+}
+
 const sample = `# static inference sample
 G := SymmetricGroup(4);
 gens := GeneratorsOfGroup(G);
@@ -82,8 +90,8 @@ assert(hoverFunction && hoverFunction.symbol.name === "f", "hover at f should re
 
 const hoverUsesFunction = analyzer.hoverAt(sample, 12, 1);
 const hoverUsesMarkdown = formatInferenceMarkdown(hoverUsesFunction);
-assert(hoverUsesMarkdown.includes("<strong>group</strong>"), "function hover should show broad group requirement from GeneratorsOfGroup");
-assert(!hoverUsesMarkdown.includes("<strong>permutation group</strong>"), "function hover should not show one permutation-group call site as a requirement");
+assertHoverToken(hoverUsesMarkdown, "group", "function hover should show broad group requirement from GeneratorsOfGroup");
+assert(!hoverUsesMarkdown.includes("permutation group"), "function hover should not show one permutation-group call site as a requirement");
 
 const hoverLocal = analyzer.hoverAt(sample, 8, 6);
 assert(hoverLocal && hoverLocal.symbol.name === "values", "hover at values should resolve local symbol");
@@ -97,11 +105,11 @@ assert(
 const builtinMarkdown = formatInferenceMarkdown(hoverBuiltin);
 assert(!builtinMarkdown.includes("#### GAP inference"), "static hover should omit the verbose inference title");
 assert(!builtinMarkdown.includes("```gap"), "function hover should omit the verbose signature code fence");
-assert(builtinMarkdown.includes("symbolIcon-functionForeground"), "documented hover should style the function keyword");
-assert(builtinMarkdown.includes("<code>G</code>"), "documented hover should show the callable parameter name");
-assert(builtinMarkdown.includes("<strong>group</strong>"), "documented hover should style group-like input types");
-assert(builtinMarkdown.includes("<strong>list of group generators</strong>"), "documented hover should style precise return types");
-assert(builtinMarkdown.includes("<strong>group element</strong>"), "documented hover should show precise return element types");
+assert(builtinMarkdown.includes("vscode-charts-purple"), "documented hover should style the function keyword");
+assertHoverToken(builtinMarkdown, "G", "documented hover should show the callable parameter name");
+assertHoverToken(builtinMarkdown, "group", "documented hover should style group-like input types");
+assertHoverToken(builtinMarkdown, "list of group generators", "documented hover should style precise return types");
+assertHoverToken(builtinMarkdown, "group element", "documented hover should show precise return element types");
 assert(!builtinMarkdown.includes("**Parameters**"), "static hover should not show verbose parameter sections");
 assert(!builtinMarkdown.includes("**Returns**"), "static hover should not show verbose return sections");
 assert(!builtinMarkdown.includes("**Return structure**"), "static hover should not show verbose return structure");
@@ -117,18 +125,18 @@ assert(hoverGcd && hoverGcd.symbol.name === "Gcd", "hover at Gcd should resolve 
 assert(!hoverGcd.symbol.returnType.filters.includes("IsList"), "documented Gcd should not infer a list return");
 assert(hoverGcd.symbol.returnType.filters.includes("IsRingElement"), "documented Gcd should infer a single ring element");
 const gcdMarkdown = formatInferenceMarkdown(hoverGcd);
-assert(gcdMarkdown.includes("<strong>ring element</strong>"), "Gcd hover should show a single ring element return");
-assert(!gcdMarkdown.includes("-> <code style=\"color: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-textLink-foreground)); font-weight: 600;\"><strong>list</strong></code>"), "Gcd signature should not show a list return");
-assert(gcdMarkdown.includes("<code>R</code>"), "optional signature parameters should split the optional ring parameter");
-assert(gcdMarkdown.includes("<code>r1</code>"), "optional signature parameters should keep the first required value parameter separate");
-assert(!gcdMarkdown.includes("<code>R,r1</code>"), "optional signature parameters should not merge comma-separated names");
+assertHoverToken(gcdMarkdown, "ring element", "Gcd hover should show a single ring element return");
+assert(!hasHoverToken(gcdMarkdown, "list"), "Gcd signature should not show a list return");
+assertHoverToken(gcdMarkdown, "R", "optional signature parameters should split the optional ring parameter");
+assertHoverToken(gcdMarkdown, "r1", "optional signature parameters should keep the first required value parameter separate");
+assert(!gcdMarkdown.includes(">R,r1</span>"), "optional signature parameters should not merge comma-separated names");
 
 const hoverDigraph = analyzer.hoverAt("Digraph([1, 2]);", 0, 1);
 const digraphMarkdown = formatInferenceMarkdown(hoverDigraph);
-assert(digraphMarkdown.includes("<code>filt</code>"), "package signatures should split optional leading parameters");
-assert(digraphMarkdown.includes("<code>obj</code>"), "package signatures should keep required parameters separate after optional groups");
-assert(digraphMarkdown.includes("<code>source</code>"), "package signatures should split optional trailing parameters");
-assert(digraphMarkdown.includes("<code>range</code>"), "package signatures should split optional trailing parameter groups");
+assertHoverToken(digraphMarkdown, "filt", "package signatures should split optional leading parameters");
+assertHoverToken(digraphMarkdown, "obj", "package signatures should keep required parameters separate after optional groups");
+assertHoverToken(digraphMarkdown, "source", "package signatures should split optional trailing parameters");
+assertHoverToken(digraphMarkdown, "range", "package signatures should split optional trailing parameter groups");
 
 const documentedFunctionSample = [
   "## Compute the size of a group-like object.",
@@ -142,11 +150,12 @@ const documentedFunctionSample = [
 ].join("\n");
 const documentedCallHover = analyzer.hoverAt(documentedFunctionSample, 6, 11);
 const documentedCallMarkdown = formatInferenceMarkdown(documentedCallHover);
-assert(documentedCallMarkdown.includes("symbolIcon-functionForeground"), "user function call hover should show a styled function signature");
-assert(documentedCallMarkdown.includes("<code>obj</code>"), "user function call hover should show the parameter name");
+assert(documentedCallMarkdown.includes("vscode-charts-purple"), "user function call hover should show a styled function signature");
+assertHoverToken(documentedCallMarkdown, "obj", "user function call hover should show the parameter name");
 assert(documentedCallMarkdown.includes("Compute the size of a group"), "user function call hover should include attached doc comments");
 assert(!documentedCallMarkdown.includes("**Documented parameters**"), "user function doc comments should avoid verbose parameter sections");
-assert(documentedCallMarkdown.includes("@param <code>obj</code> group"), "user function doc comments should render styled parameter names compactly");
+assert(documentedCallMarkdown.includes("@param"), "user function doc comments should render parameter labels");
+assert(documentedCallMarkdown.includes("group-like object to inspect"), "user function doc comments should render parameter text");
 assert(documentedCallMarkdown.includes("integer size"), "user function doc comments should render return documentation");
 
 const gcdCallSample = [
@@ -170,9 +179,9 @@ const hoverIndex = analyzer.hoverAt("Index(G, U);", 0, 1);
 assert(hoverIndex.symbol.returnType.filters.includes("IsInt"), "Index should infer an integer return from its named return clause");
 assert(!hoverIndex.symbol.returnType.filters.includes("IsGroup"), "Index should not infer a group return from subgroup argument prose");
 const hoverIndexMarkdown = formatInferenceMarkdown(hoverIndex);
-assert(hoverIndexMarkdown.includes("<code>G</code>"), "Index hover should keep the documented group parameter name");
-assert(hoverIndexMarkdown.includes("<code>U</code>"), "Index hover should keep the documented subgroup parameter name");
-assert(hoverIndexMarkdown.includes("<strong>group</strong>"), "Index hover should infer group parameter types from the matching doc entry");
+assertHoverToken(hoverIndexMarkdown, "G", "Index hover should keep the documented group parameter name");
+assertHoverToken(hoverIndexMarkdown, "U", "Index hover should keep the documented subgroup parameter name");
+assertHoverToken(hoverIndexMarkdown, "group", "Index hover should infer group parameter types from the matching doc entry");
 
 const hoverLength = analyzer.hoverAt("Length([1, 2]);", 0, 1);
 assert(hoverLength.symbol.returnType.filters.includes("IsInt"), "Length should infer an integer return");
@@ -185,21 +194,21 @@ const hoverAbelianGroup = analyzer.hoverAt("AbelianGroup([2, 3]);", 0, 1);
 assert(hoverAbelianGroup.symbol.returnType.filters.includes("IsGroup"), "constructors mentioning list arguments should still infer constructed groups");
 assert(!hoverAbelianGroup.symbol.returnType.filters.includes("IsList"), "AbelianGroup should not infer a list return from its ints list argument");
 const hoverAbelianGroupMarkdown = formatInferenceMarkdown(hoverAbelianGroup);
-assert(hoverAbelianGroupMarkdown.includes("<code>filt</code>"), "AbelianGroup hover should show the optional filter parameter");
-assert(hoverAbelianGroupMarkdown.includes("<strong>filter</strong>"), "optional filter parameters should be typed as filters");
-assert(hoverAbelianGroupMarkdown.includes("<code>ints</code>"), "AbelianGroup hover should show the integer-list parameter");
-assert(hoverAbelianGroupMarkdown.includes("<strong>list</strong>"), "AbelianGroup ints parameter should be list-typed");
-assert(hoverAbelianGroupMarkdown.includes("<strong>integer</strong>"), "AbelianGroup ints parameter should show integer elements");
+assertHoverToken(hoverAbelianGroupMarkdown, "filt", "AbelianGroup hover should show the optional filter parameter");
+assertHoverToken(hoverAbelianGroupMarkdown, "filter", "optional filter parameters should be typed as filters");
+assertHoverToken(hoverAbelianGroupMarkdown, "ints", "AbelianGroup hover should show the integer-list parameter");
+assertHoverToken(hoverAbelianGroupMarkdown, "list", "AbelianGroup ints parameter should be list-typed");
+assertHoverToken(hoverAbelianGroupMarkdown, "integer", "AbelianGroup ints parameter should show integer elements");
 
 const hoverSymmetricGroup = analyzer.hoverAt("SymmetricGroup(4);", 0, 1);
 assert(hoverSymmetricGroup.symbol.returnType.filters.includes("IsGroup"), "SymmetricGroup hover should infer a group return");
 assert(hoverSymmetricGroup.symbol.returnType.filters.includes("IsPermGroup"), "SymmetricGroup hover should infer a permutation group return");
 assert(!hoverSymmetricGroup.symbol.returnType.filters.includes("IsInt"), "SymmetricGroup hover should not confuse degree prose for its return type");
 const hoverSymmetricGroupMarkdown = formatInferenceMarkdown(hoverSymmetricGroup);
-assert(hoverSymmetricGroupMarkdown.includes("<code>filt</code>"), "SymmetricGroup hover should keep the optional filter parameter");
-assert(hoverSymmetricGroupMarkdown.includes("<strong>filter</strong>"), "SymmetricGroup optional filter should be filter-typed");
-assert(hoverSymmetricGroupMarkdown.includes("<code>deg</code>"), "SymmetricGroup hover should keep the degree parameter");
-assert(hoverSymmetricGroupMarkdown.includes("<strong>integer</strong>"), "SymmetricGroup degree parameter should be integer-typed");
+assertHoverToken(hoverSymmetricGroupMarkdown, "filt", "SymmetricGroup hover should keep the optional filter parameter");
+assertHoverToken(hoverSymmetricGroupMarkdown, "filter", "SymmetricGroup optional filter should be filter-typed");
+assertHoverToken(hoverSymmetricGroupMarkdown, "deg", "SymmetricGroup hover should keep the degree parameter");
+assertHoverToken(hoverSymmetricGroupMarkdown, "integer", "SymmetricGroup degree parameter should be integer-typed");
 
 const hoverAlternatingGroup = analyzer.hoverAt("AlternatingGroup(4);", 0, 1);
 assert(hoverAlternatingGroup.symbol.returnType.filters.includes("IsGroup"), "AlternatingGroup hover should infer a group return");
@@ -262,8 +271,8 @@ assert(!hoverBabyAleshin.symbol.type.filters.includes("IsList"), "incidental gen
 const hoverString = analyzer.hoverAt('str := "hello";', 0, 1);
 const stringMarkdown = formatInferenceMarkdown(hoverString);
 assert(hoverString.symbol.type.filters.includes("IsString"), "hover at a string assignment should infer IsString");
-assert(stringMarkdown.includes("<code>str</code>"), "string hover should include a readable value signature");
-assert(stringMarkdown.includes("<strong>string</strong>"), "string hover should style the inferred type");
+assertHoverToken(stringMarkdown, "str", "string hover should include a readable value signature");
+assertHoverToken(stringMarkdown, "string", "string hover should style the inferred type");
 assert(!stringMarkdown.includes("# global variable"), "string hover should omit verbose variable scope labels");
 
 const containerHoverSample = [
@@ -274,17 +283,20 @@ const containerHoverSample = [
 const containerHoverAnalysis = analyzer.analyze(containerHoverSample, "memory://container-hover.g");
 const valuesHover = containerHoverAnalysis.hoverAt(0, 1);
 const valuesMarkdown = formatInferenceMarkdown(valuesHover);
-assert(valuesMarkdown.includes("<code>values</code>"), "list hover should show the variable name in its signature");
-assert(valuesMarkdown.includes("<strong>list</strong>"), "list hover should style the container type");
-assert(valuesMarkdown.includes("<strong>positive integer</strong>"), "list hover should style the element type");
-assert(!valuesMarkdown.includes("- element:"), "list hover should omit verbose structure rows");
+assertHoverToken(valuesMarkdown, "values", "list hover should show the variable name in its signature");
+assertHoverToken(valuesMarkdown, "list", "list hover should style the container type");
+assertHoverToken(valuesMarkdown, "positive integer", "list hover should style the element type");
+assertHoverToken(valuesMarkdown, "element", "list hover should include the element member row");
 const infoHover = containerHoverAnalysis.hoverAt(1, 1);
 const infoMarkdown = formatInferenceMarkdown(infoHover);
-assert(infoMarkdown.includes("<code>info</code>"), "record hover signature should show the variable name");
-assert(infoMarkdown.includes("<strong>record</strong>"), "record hover signature should style record type");
-assert(!infoMarkdown.includes("<code>count</code>"), "record hover should omit verbose field rows");
-assert(!infoMarkdown.includes("<code>name</code>"), "record hover should omit verbose field rows");
-assert(!infoMarkdown.includes("<code>first</code>"), "record hover should omit verbose field rows");
+assertHoverToken(infoMarkdown, "info", "record hover signature should show the variable name");
+assertHoverToken(infoMarkdown, "record", "record hover signature should style record type");
+assertHoverToken(infoMarkdown, ".count", "record hover should show integer field names");
+assertHoverToken(infoMarkdown, "nonnegative integer", "record hover should show integer field types");
+assertHoverToken(infoMarkdown, ".name", "record hover should show string field names");
+assertHoverToken(infoMarkdown, "string", "record hover should show string field types");
+assertHoverToken(infoMarkdown, ".first", "record hover should preserve selected list element field names");
+assertHoverToken(infoMarkdown, "positive integer", "record hover should preserve selected list element field types");
 
 const materializedElementsSample = [
   "G := SymmetricGroup(4);",
@@ -302,8 +314,8 @@ assert(asList && asList.type.element && asList.type.element.filters.includes("Is
 const firstElement = materializedElementsAnalysis.scopes[0].symbols.get("first");
 assert(firstElement && firstElement.type.filters.includes("IsMultiplicativeElementWithInverse"), "indexing Elements(G) should preserve group element type");
 const elemsHoverMarkdown = formatInferenceMarkdown(materializedElementsAnalysis.hoverAt(1, 1));
-assert(elemsHoverMarkdown.includes("<strong>list</strong>"), "Elements hover should show list type");
-assert(elemsHoverMarkdown.includes("<strong>group element</strong>"), "Elements hover should show group element structure");
+assertHoverToken(elemsHoverMarkdown, "list", "Elements hover should show list type");
+assertHoverToken(elemsHoverMarkdown, "group element", "Elements hover should show group element structure");
 
 const hoverSize = analyzer.hoverAt("Size(G);", 0, 1);
 assert(hoverSize.symbol.type.parameterTypes[0].filters.includes("IsListOrCollection"), "Size should expose declaration input filters");

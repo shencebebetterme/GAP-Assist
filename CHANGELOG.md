@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.39
+
+- Restored colored hover tokens for compact function and variable inference without bold type styling.
+- Rendered user function doc comments on explicit hover lines for summaries, parameters, and returns.
+- Added compact member/type rows for container and record variable hovers.
+
 ## 0.3.38
 
 - Simplified GAP inference hovers to compact colored one-line type signatures for functions and variables.
