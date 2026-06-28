@@ -141,9 +141,9 @@ async function main() {
   });
 
   const hover = await waitForResponse(2);
-  assert(hover.result.contents.value.includes("GAP inference"), "hover should include static inference");
   assert(hover.result.contents.value.includes("<code>G</code>"), "hover should include inferred GAP symbol");
   assert(hover.result.contents.value.includes("<strong>symmetric permutation group</strong>"), "hover should include styled inferred GAP type");
+  assert(!hover.result.contents.value.includes("GAP inference"), "hover should omit the verbose inference title");
   assert(!hover.result.contents.value.includes("Source:"), "hover should not include internal source lines");
   assert(!hover.result.contents.value.includes("Confidence:"), "hover should not include confidence lines");
 
@@ -181,7 +181,7 @@ async function main() {
   });
 
   const sizeHover = await waitForResponse(6);
-  assert(sizeHover.result.contents.value.includes("Size := function"), "hover signature should include Size");
+  assert(sizeHover.result.contents.value.includes("symbolIcon-functionForeground"), "hover signature should style the function keyword");
   assert(sizeHover.result.contents.value.includes("<strong>list or collection</strong>"), "hover signature should include styled Size input type");
   assert(!sizeHover.result.contents.value.includes("Input filters"), "hover should not repeat declaration input filters");
 
@@ -200,7 +200,8 @@ async function main() {
   });
 
   const functionHover = await waitForResponse(5);
-  assert(functionHover.result.contents.value.includes("uses := function"), "function hover should include the function name");
+  assert(functionHover.result.contents.value.includes("symbolIcon-functionForeground"), "function hover should include a styled function signature");
+  assert(functionHover.result.contents.value.includes("<code>obj</code>"), "function hover should include the parameter name");
   assert(functionHover.result.contents.value.includes("<strong>list or collection</strong>"), "function hover should include body-derived input requirement in the signature");
   assert(!functionHover.result.contents.value.includes("<strong>permutation group</strong>"), "function hover should not narrow requirements to one call-site type");
   assert(!functionHover.result.contents.value.includes("Source:"), "function hover should not include internal source lines");

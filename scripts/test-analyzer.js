@@ -95,13 +95,16 @@ assert(
   "GeneratorsOfGroup should resolve synonym declaration input filters"
 );
 const builtinMarkdown = formatInferenceMarkdown(hoverBuiltin);
-assert(builtinMarkdown.includes("#### GAP inference"), "static hover should use the inference title");
-assert(builtinMarkdown.includes("```gap"), "function hover should include a syntax-highlightable GAP signature block");
-assert(builtinMarkdown.includes("# system function"), "documented hover should show the callable scope");
-assert(builtinMarkdown.includes("GeneratorsOfGroup := function"), "documented hover should show the callable name in the signature");
+assert(!builtinMarkdown.includes("#### GAP inference"), "static hover should omit the verbose inference title");
+assert(!builtinMarkdown.includes("```gap"), "function hover should omit the verbose signature code fence");
+assert(builtinMarkdown.includes("symbolIcon-functionForeground"), "documented hover should style the function keyword");
+assert(builtinMarkdown.includes("<code>G</code>"), "documented hover should show the callable parameter name");
 assert(builtinMarkdown.includes("<strong>group</strong>"), "documented hover should style group-like input types");
 assert(builtinMarkdown.includes("<strong>list of group generators</strong>"), "documented hover should style precise return types");
 assert(builtinMarkdown.includes("<strong>group element</strong>"), "documented hover should show precise return element types");
+assert(!builtinMarkdown.includes("**Parameters**"), "static hover should not show verbose parameter sections");
+assert(!builtinMarkdown.includes("**Returns**"), "static hover should not show verbose return sections");
+assert(!builtinMarkdown.includes("**Return structure**"), "static hover should not show verbose return structure");
 assert(!builtinMarkdown.includes("**Type**"), "static hover should not repeat the signature type");
 assert(!builtinMarkdown.includes("**Filters**"), "static hover should not repeat top-level filters");
 assert(!builtinMarkdown.includes("Input filters"), "static hover should not repeat signature input filters");
@@ -139,10 +142,11 @@ const documentedFunctionSample = [
 ].join("\n");
 const documentedCallHover = analyzer.hoverAt(documentedFunctionSample, 6, 11);
 const documentedCallMarkdown = formatInferenceMarkdown(documentedCallHover);
-assert(documentedCallMarkdown.includes("uses := function"), "user function call hover should show the function signature");
-assert(documentedCallMarkdown.includes("Compute the size of a group-like object."), "user function call hover should include attached doc comments");
-assert(documentedCallMarkdown.includes("**Documented parameters**"), "user function doc comments should render parameter documentation");
-assert(documentedCallMarkdown.includes("<code>obj</code>: group-like object to inspect"), "user function doc comments should render styled parameter names");
+assert(documentedCallMarkdown.includes("symbolIcon-functionForeground"), "user function call hover should show a styled function signature");
+assert(documentedCallMarkdown.includes("<code>obj</code>"), "user function call hover should show the parameter name");
+assert(documentedCallMarkdown.includes("Compute the size of a group"), "user function call hover should include attached doc comments");
+assert(!documentedCallMarkdown.includes("**Documented parameters**"), "user function doc comments should avoid verbose parameter sections");
+assert(documentedCallMarkdown.includes("@param <code>obj</code> group"), "user function doc comments should render styled parameter names compactly");
 assert(documentedCallMarkdown.includes("integer size"), "user function doc comments should render return documentation");
 
 const gcdCallSample = [
@@ -258,9 +262,9 @@ assert(!hoverBabyAleshin.symbol.type.filters.includes("IsList"), "incidental gen
 const hoverString = analyzer.hoverAt('str := "hello";', 0, 1);
 const stringMarkdown = formatInferenceMarkdown(hoverString);
 assert(hoverString.symbol.type.filters.includes("IsString"), "hover at a string assignment should infer IsString");
-assert(stringMarkdown.includes("# global variable"), "string hover should include the variable scope");
 assert(stringMarkdown.includes("<code>str</code>"), "string hover should include a readable value signature");
 assert(stringMarkdown.includes("<strong>string</strong>"), "string hover should style the inferred type");
+assert(!stringMarkdown.includes("# global variable"), "string hover should omit verbose variable scope labels");
 
 const containerHoverSample = [
   "values := List([1 .. 5], i -> Factorial(i));",
@@ -273,17 +277,14 @@ const valuesMarkdown = formatInferenceMarkdown(valuesHover);
 assert(valuesMarkdown.includes("<code>values</code>"), "list hover should show the variable name in its signature");
 assert(valuesMarkdown.includes("<strong>list</strong>"), "list hover should style the container type");
 assert(valuesMarkdown.includes("<strong>positive integer</strong>"), "list hover should style the element type");
-assert(valuesMarkdown.includes("- element:"), "list hover should include a structure element row");
+assert(!valuesMarkdown.includes("- element:"), "list hover should omit verbose structure rows");
 const infoHover = containerHoverAnalysis.hoverAt(1, 1);
 const infoMarkdown = formatInferenceMarkdown(infoHover);
 assert(infoMarkdown.includes("<code>info</code>"), "record hover signature should show the variable name");
 assert(infoMarkdown.includes("<strong>record</strong>"), "record hover signature should style record type");
-assert(infoMarkdown.includes("<code>count</code>"), "record hover should show integer field names");
-assert(infoMarkdown.includes("<strong>nonnegative integer</strong>"), "record hover should show integer field types");
-assert(infoMarkdown.includes("<code>name</code>"), "record hover should show string field names");
-assert(infoMarkdown.includes("<strong>string</strong>"), "record hover should show string field types");
-assert(infoMarkdown.includes("<code>first</code>"), "record hover should preserve selected list element field names");
-assert(infoMarkdown.includes("<strong>positive integer</strong>"), "record hover should preserve selected list element field types");
+assert(!infoMarkdown.includes("<code>count</code>"), "record hover should omit verbose field rows");
+assert(!infoMarkdown.includes("<code>name</code>"), "record hover should omit verbose field rows");
+assert(!infoMarkdown.includes("<code>first</code>"), "record hover should omit verbose field rows");
 
 const materializedElementsSample = [
   "G := SymmetricGroup(4);",

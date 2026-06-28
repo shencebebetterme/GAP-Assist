@@ -8,6 +8,7 @@ const HOVER_WRAP_COLUMN = 88;
 const MAX_HOVER_FIELDS = 8;
 const HOVER_SIGNATURE_STYLE = "font-family: var(--vscode-editor-font-family); line-height: 1.45;";
 const HOVER_META_STYLE = "color: var(--vscode-descriptionForeground);";
+const HOVER_KEYWORD_STYLE = "color: var(--vscode-symbolIcon-functionForeground, var(--vscode-textLink-foreground));";
 const HOVER_OPERATOR_STYLE = "color: var(--vscode-symbolIcon-operatorForeground, var(--vscode-foreground));";
 const HOVER_TYPE_STYLE = "color: var(--vscode-symbolIcon-typeParameterForeground, var(--vscode-textLink-foreground)); font-weight: 600;";
 
@@ -3326,28 +3327,15 @@ function formatInferenceMarkdown(hover) {
   const symbol = hover.symbol;
   const type = symbol.type;
   const displayName = symbol.name || hover.word.text;
-  const returnType = symbol.returnType || (type && type.returnType);
-  const lines = ["#### GAP inference", ""];
+  const lines = [`<div style="${HOVER_SIGNATURE_STYLE}">`];
 
   if (isFunctionType(type)) {
-    lines.push(...formatFunctionSignatureLines(scopeLabel(symbol.scope || "symbol"), displayName, symbol, type));
-    appendFunctionDocumentation(lines, symbol.documentation || (type && type.documentation));
-    appendParameterDetails(lines, signatureParameterEntries(symbol, type));
+    lines.push(htmlLine(formatCompactFunctionType(symbol, type)));
+    lines.push("</div>");
+    appendCompactFunctionDocumentation(lines, symbol.documentation || (type && type.documentation));
   } else {
-    lines.push(`<div style="${HOVER_SIGNATURE_STYLE}">`);
-    lines.push(...formatValueSignatureLines(scopeLabel(symbol.scope || "symbol"), displayName, type));
+    lines.push(htmlLine(`${identifierToken(displayName)}: ${formatTypeHtml(type)}`));
     lines.push("</div>", "");
-    appendStructureDetails(lines, type, "**Structure**");
-  }
-
-  if (returnType) {
-    lines.push(`**Returns** ${formatTypeHtml(returnType)}`, "");
-    appendStructureDetails(lines, returnType, "**Return structure**");
-  }
-
-  if (type && type.declarations && type.declarations.length > 0) {
-    const declaration = type.declarations[0];
-    lines.push(`**Declaration** \`${declaration.callee}\` · \`${declaration.file}:${declaration.line}\``, "");
   }
 
   return trimBlankLines(lines).join("\n");
@@ -3384,6 +3372,12 @@ function formatFunctionSignatureLines(scope, displayName, symbol, type) {
   return lines;
 }
 
+function formatCompactFunctionType(symbol, type) {
+  const returnType = symbol.returnType || (type && type.returnType);
+  const params = signatureParameterEntries(symbol, type).map(formatSignatureParameter).join(", ");
+  return `${keywordToken("function")}(${params}) ${operatorToken("->")} ${formatTypeHtml(returnType)}`;
+}
+
 function appendFunctionDocumentation(lines, documentation) {
   if (!documentation) {
     return;
@@ -3409,6 +3403,30 @@ function appendFunctionDocumentation(lines, documentation) {
       lines.push(`- ${item}`);
     }
     lines.push("");
+  }
+}
+
+function appendCompactFunctionDocumentation(lines, documentation) {
+  if (!documentation) {
+    return;
+  }
+
+  const summary = Array.isArray(documentation.summary) ? documentation.summary.filter(Boolean) : [];
+  const params = Array.isArray(documentation.params) ? documentation.params : [];
+  const returns = Array.isArray(documentation.returns) ? documentation.returns.filter(Boolean) : [];
+  if (summary.length === 0 && params.length === 0 && returns.length === 0) {
+    return;
+  }
+
+  lines.push("");
+  for (const line of summary) {
+    lines.push(escapeMarkdown(line));
+  }
+  for (const parameter of params) {
+    lines.push(`@param ${identifierToken(parameter.name)} ${escapeMarkdown(parameter.text || "")}`.trimEnd());
+  }
+  for (const item of returns) {
+    lines.push(`@returns ${escapeMarkdown(item)}`);
   }
 }
 
@@ -3548,6 +3566,10 @@ function htmlIndent(count) {
 
 function identifierToken(value) {
   return `<code>${htmlEscape(value)}</code>`;
+}
+
+function keywordToken(value) {
+  return `<code style="${HOVER_KEYWORD_STYLE}">${htmlEscape(value)}</code>`;
 }
 
 function operatorToken(value) {

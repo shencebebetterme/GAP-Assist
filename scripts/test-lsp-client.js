@@ -60,8 +60,8 @@ async function main() {
     const gensHover = await client.hover(document, { line: 4, character: 1 });
     assert(gensHover.contents.value.includes("<code>gens</code>"), "client hover should return server inference for globals");
     assert(gensHover.contents.value.includes("<strong>list of group generators</strong>"), "client hover should style global container type");
-    assert(gensHover.contents.value.includes("element:"), "client hover should include global container structure");
     assert(gensHover.contents.value.includes("<strong>group element</strong>"), "client hover should style global container element type");
+    assert(!gensHover.contents.value.includes("element:"), "client hover should omit verbose container structure rows");
 
     const localHover = await client.hover(document, { line: 7, character: 6 });
     assert(localHover.contents.value.includes("<code>values</code>"), "client hover should return server inference for local variables");
@@ -69,7 +69,8 @@ async function main() {
     assert(localHover.contents.value.includes("<strong>positive integer</strong>"), "client hover should style local container element type");
 
     const functionHover = await client.hover(document, { line: 10, character: 1 });
-    assert(functionHover.contents.value.includes("uses := function"), "client hover should return a highlighted function signature");
+    assert(functionHover.contents.value.includes("symbolIcon-functionForeground"), "client hover should return a highlighted function signature");
+    assert(functionHover.contents.value.includes("<code>obj</code>"), "client hover should include the parameter name");
     assert(functionHover.contents.value.includes("<strong>list or collection</strong>"), "client hover should style body-derived function input requirement");
     assert(!functionHover.contents.value.includes("<strong>permutation group</strong>"), "client hover should not narrow requirements to one call-site type");
     assert(!functionHover.contents.value.includes("Input filters"), "client hover should not repeat function input filters");

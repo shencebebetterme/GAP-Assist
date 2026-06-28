@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.38
+
+- Simplified GAP inference hovers to compact colored one-line type signatures for functions and variables.
+- Kept user function `##` doc comments available without inferred parameter/return sections.
+
 ## 0.3.37
 
 - Added `##`/`#!` doc-comment hovers for user-defined GAP functions, including `@param` and `@returns` sections.
