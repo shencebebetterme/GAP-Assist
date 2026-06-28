@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.34
+
+- Added inline debug values for active function parameters at their declaration positions.
+
 ## 0.3.33
 
 - Added inline debug values for GAP assignment targets while paused.

@@ -242,8 +242,18 @@ function gapInlineValuesForDocument(document, viewPort, context) {
   const seen = new Set();
   const firstLine = Math.max(0, viewPort && viewPort.start ? viewPort.start.line : 0);
   const lastLine = inlineValuesLastLine(document, viewPort, context);
+  const ast = parseGapSource(document.getText());
+  const targets = [
+    ...assignmentTargetsInDocument(document, ast, firstLine, lastLine),
+    ...functionParameterTargetsInDocument(document, ast, firstLine, lastLine, context)
+  ].sort((left, right) => {
+    if (left.line !== right.line) {
+      return left.line - right.line;
+    }
+    return left.startCharacter - right.startCharacter;
+  });
 
-  for (const target of assignmentTargetsInDocument(document, firstLine, lastLine)) {
+  for (const target of targets) {
     const key = `${target.line}:${target.name}`;
     if (seen.has(key)) {
       continue;
@@ -269,22 +279,43 @@ function inlineValuesLastLine(document, viewPort, context) {
   return Number.isInteger(stoppedLine) ? Math.min(viewportLastLine, stoppedLine) : viewportLastLine;
 }
 
-function assignmentTargetsInDocument(document, firstLine, lastLine) {
-  const ast = parseGapSource(document.getText());
+function assignmentTargetsInDocument(document, ast, firstLine, lastLine) {
   const targets = [];
   collectAssignmentTargets(ast.statements || [], targets);
   return targets
-    .map((target) => {
-      const start = document.positionAt(target.nameStart);
-      const end = document.positionAt(target.nameEnd);
-      return {
-        name: target.name,
-        line: start.line,
-        startCharacter: start.character,
-        endCharacter: end.character
-      };
-    })
+    .map((target) => inlineTargetFromOffsets(document, target))
     .filter((target) => target.line >= firstLine && target.line <= lastLine);
+}
+
+function functionParameterTargetsInDocument(document, ast, firstLine, lastLine, context) {
+  const stoppedOffset = stoppedOffsetInDocument(document, context);
+  if (!Number.isInteger(stoppedOffset)) {
+    return [];
+  }
+
+  const activeFunction = innermostFunctionAtOffset(ast.statements || [], stoppedOffset);
+  if (!activeFunction) {
+    return [];
+  }
+
+  return (activeFunction.params || [])
+    .map((param) => inlineTargetFromOffsets(document, {
+      name: param.name,
+      nameStart: param.start,
+      nameEnd: param.end
+    }))
+    .filter((target) => target.line >= firstLine && target.line <= lastLine);
+}
+
+function inlineTargetFromOffsets(document, target) {
+  const start = document.positionAt(target.nameStart);
+  const end = document.positionAt(target.nameEnd);
+  return {
+    name: target.name,
+    line: start.line,
+    startCharacter: start.character,
+    endCharacter: end.character
+  };
 }
 
 function collectAssignmentTargets(statements, targets) {
@@ -308,6 +339,52 @@ function collectAssignmentTargets(statements, targets) {
       collectAssignmentTargets(statement.body, targets);
     }
   }
+}
+
+function stoppedOffsetInDocument(document, context) {
+  const position = context && context.stoppedLocation && context.stoppedLocation.start;
+  if (!position || !Number.isInteger(position.line) || !Number.isInteger(position.character)) {
+    return undefined;
+  }
+  if (typeof document.offsetAt === "function") {
+    return document.offsetAt(position);
+  }
+
+  let offset = 0;
+  for (let line = 0; line < position.line; line += 1) {
+    offset += document.lineAt(line).text.length + 1;
+  }
+  return offset + position.character;
+}
+
+function innermostFunctionAtOffset(statements, offset) {
+  let activeFunction;
+  for (const statement of statements || []) {
+    if (statement.type === "functionAssignment" && offset >= statement.bodyStart && offset <= statement.bodyEnd) {
+      activeFunction = innermostFunctionAtOffset(statement.body, offset) || statement;
+      continue;
+    }
+
+    const nested = nestedStatements(statement);
+    const nestedFunction = nested.length > 0 ? innermostFunctionAtOffset(nested, offset) : undefined;
+    if (nestedFunction) {
+      activeFunction = nestedFunction;
+    }
+  }
+  return activeFunction;
+}
+
+function nestedStatements(statement) {
+  if (statement.type === "ifStatement") {
+    return [
+      ...(statement.elseBody || []),
+      ...(statement.branches || []).flatMap((branch) => branch.body || [])
+    ];
+  }
+  if (statement.type === "forStatement" || statement.type === "whileStatement" || statement.type === "repeatStatement") {
+    return statement.body || [];
+  }
+  return [];
 }
 
 class GapSemanticTokensProvider {

@@ -135,8 +135,29 @@ after := 1;
   );
   assert.deepStrictEqual(
     inlineValues.map((value) => `${value.variableName}@${value.range.start.line}`),
-    ["G@0", "person@1", "values@7"],
-    "inline values should cover simple assignments up to the paused line and skip function definitions and record fields"
+    ["G@0", "person@1", "n@5", "values@7"],
+    "inline values should cover simple assignments and active function parameters up to the paused line"
+  );
+
+  const multilineInlineDocument = testDocument(`multiArg := function(
+  left,
+  right
+)
+  local sum;
+  sum := left + right;
+  return sum;
+end;
+after := 0;
+`);
+  const multilineInlineValues = extension.__test.gapInlineValuesForDocument(
+    multilineInlineDocument,
+    { start: { line: 0, character: 0 }, end: { line: 8, character: 0 } },
+    { stoppedLocation: { start: { line: 5, character: 2 }, end: { line: 5, character: 2 } } }
+  );
+  assert.deepStrictEqual(
+    multilineInlineValues.map((value) => `${value.variableName}@${value.range.start.line}`),
+    ["left@1", "right@2", "sum@5"],
+    "inline values should place active function parameters on their own lines and still skip function definitions"
   );
 } finally {
   Module._load = originalLoad;
@@ -155,6 +176,9 @@ function testDocument(text) {
     lineCount: lines.length,
     getText: () => text,
     lineAt: (line) => ({ text: lines[line] || "" }),
+    offsetAt(position) {
+      return lineStarts[position.line] + position.character;
+    },
     positionAt(offset) {
       let line = 0;
       while (line + 1 < lineStarts.length && lineStarts[line + 1] <= offset) {
