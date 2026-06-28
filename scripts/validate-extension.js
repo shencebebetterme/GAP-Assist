@@ -94,6 +94,7 @@ function main() {
 
   for (const file of [
     "server/analyzer.js",
+    "server/hoverFormatter.js",
     "server/parser.js",
     "server/lsp-server.js",
     "debug/gapDebugAdapter.js",

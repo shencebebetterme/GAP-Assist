@@ -22,6 +22,9 @@
       "include": "#constants"
     },
     {
+      "include": "#type-labels"
+    },
+    {
       "include": "#declarations"
     },
     {
@@ -95,6 +98,18 @@
         {
           "name": "constant.language.gap",
           "match": "\\b(?:fail|false|infinity|last|last2|last3|true)\\b|-infinity\\b"
+        }
+      ]
+    },
+    "type-labels": {
+      "patterns": [
+        {
+          "name": "variable.parameter.gap",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*:)"
+        },
+        {
+          "name": "support.type.gap",
+          "match": "\\b(?:GAP|object|unknown|boolean|integer|positive|nonnegative|rational|character|string|list|collection|record|function|filter|group|permutation|generator|generators|element|ring|matrix|mapping|magma|semigroup|monoid|field|algebra|module|space|infinity)\\b"
         }
       ]
     },

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.40
+
+- Moved GAP hover markdown rendering out of `server/analyzer.js` into `server/hoverFormatter.js`.
+- Switched compact inference hovers to syntax-highlightable `gap` code blocks so VS Code preserves coloring.
+- Added grammar scopes for inferred type labels used in hover signatures and member rows.
+- Restyled user function `##` doc comments as a readable documentation block.
+
 ## 0.3.39
 
 - Restored colored hover tokens for compact function and variable inference without bold type styling.
