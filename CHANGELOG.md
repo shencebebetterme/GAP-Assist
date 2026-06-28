@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- Recognized user-defined functions from files loaded with `Read("...")` for static analysis, diagnostics, and hover.
+
 ## 0.4.1
 
 - Added the GAP Assist extension icon for Marketplace and VS Code extension views.
