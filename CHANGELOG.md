@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Fixed nested `List(..., i -> List(..., j -> ...))` callback inference so analyzer hovers keep working.
+
 ## 0.4.2
 
 - Recognized user-defined functions from files loaded with `Read("...")` for static analysis, diagnostics, and hover.

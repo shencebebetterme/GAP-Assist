@@ -854,6 +854,28 @@ assert(callbackDiagnostics[0].message.includes("ForAny callback should return a 
 assert(callbackDiagnostics[0].message.includes("got integer"), "predicate diagnostic should include the callback body type");
 assert.strictEqual(callbackDiagnostics[0].range.start.line, 4, "predicate diagnostic should point at the callback body line");
 
+const nestedListCallbackSample = [
+  "mySum := function(a, b)",
+  "    local c;",
+  "    c := a + b;",
+  "    return c;",
+  "end;",
+  "",
+  "es := List([1,2], i -> mySum(i,1));",
+  "",
+  "eStd := List([1..2], i -> List([1..2], j -> mySum(i,j)));",
+  ""
+].join("\n");
+const nestedListCallbackAnalysis = analyzer.analyze(nestedListCallbackSample, "memory://nested-list-callback.g");
+const eStd = nestedListCallbackAnalysis.scopes[0].symbols.get("eStd");
+assert(eStd && eStd.type.filters.includes("IsList"), "nested List callbacks should infer eStd without throwing");
+const nestedOuterHover = nestedListCallbackAnalysis.hoverAt(8, 21);
+assert(nestedOuterHover && nestedOuterHover.symbol.name === "i", "nested List hover should resolve the outer callback parameter");
+const nestedInnerHover = nestedListCallbackAnalysis.hoverAt(8, 39);
+assert(nestedInnerHover && nestedInnerHover.symbol.name === "j", "nested List hover should resolve the inner callback parameter");
+const nestedCallHover = nestedListCallbackAnalysis.hoverAt(8, 44);
+assert(nestedCallHover && nestedCallHover.symbol.name === "mySum", "nested List hover should still resolve the user function call");
+
 const includeDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-assist-includes-"));
 try {
   const yPath = path.join(includeDir, "y.g");

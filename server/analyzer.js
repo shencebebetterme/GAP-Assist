@@ -2271,8 +2271,9 @@ function isUnknownType(type) {
 function inferArrowCallback(argumentText, mapper, firstParameterType, scope, data, expressionOffset, mapperSpan, parameterSource) {
   const span = mapperSpan || { start: 0, end: argumentText.length };
   const mapperScope = createScope("arrow function", expressionOffset + span.start, expressionOffset + span.end, scope);
-  mapperScope.lineStarts = data.lineStarts;
-  if (Array.isArray(data.scopes)) {
+  const lineStarts = inferenceLineStarts(data, scope);
+  mapperScope.lineStarts = lineStarts;
+  if (data && Array.isArray(data.scopes)) {
     data.scopes.push(mapperScope);
   }
 
@@ -2283,7 +2284,7 @@ function inferArrowCallback(argumentText, mapper, firstParameterType, scope, dat
     mapperScope.symbols.set(param.name, {
       name: param.name,
       scope: "parameter",
-      range: rangeFromOffset(data.lineStarts, expressionOffset + span.start + param.start),
+      range: rangeFromOffset(lineStarts, expressionOffset + span.start + param.start),
       type: paramType,
       source: parameterSource,
       assigned: true
@@ -2292,6 +2293,16 @@ function inferArrowCallback(argumentText, mapper, firstParameterType, scope, dat
 
   const bodyType = inferExpression(mapper.body, mapperScope, data, expressionOffset + span.start + mapper.bodyStart);
   return { scope: mapperScope, bodyType };
+}
+
+function inferenceLineStarts(data, scope) {
+  if (data && Array.isArray(data.lineStarts)) {
+    return data.lineStarts;
+  }
+  if (scope && Array.isArray(scope.lineStarts)) {
+    return scope.lineStarts;
+  }
+  return [0];
 }
 
 function reportPredicateCallbackDiagnostic(name, mapper, bodyType, data, expressionOffset, mapperSpan) {
