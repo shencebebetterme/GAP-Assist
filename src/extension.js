@@ -7,6 +7,7 @@ const { pathToFileURL } = require("url");
 const vscode = require("vscode");
 const { getEntries, isIdentifier, loadDeclarations, loadDocumentation } = require("./docs");
 const { GapLanguageServerClient } = require("./lspClient");
+const { registerSemanticObjectsSupport } = require("./semanticObjects");
 const { GapAnalyzer, formatInferenceMarkdown } = require("../server/analyzer");
 const { createFileIncludeResolver } = require("../server/includes");
 const { parseGapSource } = require("../server/parser");
@@ -56,6 +57,7 @@ function activate(context) {
     vscode.languages.registerHoverProvider(GAP_SELECTOR, hoverProvider),
     registerInlineValuesProvider(),
     registerRuntimeErrorDecorationSupport(),
+    registerSemanticObjectsSupport(context, debugOutputChannel),
     vscode.languages.registerDocumentSemanticTokensProvider(
       GAP_SELECTOR,
       new GapSemanticTokensProvider(docs),

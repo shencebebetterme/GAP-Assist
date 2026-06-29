@@ -19,6 +19,7 @@ const REQUIRED_FILES = [
   "src/docs.js",
   "src/extension.js",
   "src/lspClient.js",
+  "src/semanticObjects.js",
   "data/gap-docs.json"
 ];
 
@@ -104,6 +105,7 @@ function main() {
     "debug/gapDebugAdapter.js",
     "debug/instrumenter.js",
     "src/lspClient.js",
+    "src/semanticObjects.js",
     "scripts/test-parser.js",
     "scripts/test-analyzer.js",
     "scripts/test-extension-helpers.js",

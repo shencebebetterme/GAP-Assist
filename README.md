@@ -7,6 +7,7 @@ GAP Assist brings syntax highlighting, static analysis, and debugging to GAP sou
 
 - **GAP syntax highlighting** for keywords, declarations, functions for GAP reference and all the official packages.
 - A **VS Code debugger** for `.g` files with breakpoints, statement stepping, variables, hover/watch values, inline values, and mapped runtime errors.
+- A **GAP Objects** inspector in the Run and Debug view with semantic cards for paused runtime values and lazy actions for richer mathematical computations.
 - **Intellisense**
   - **Static inference** for globals, locals, user functions, return values, records, lists, callback parameters, and container element types.
   - **Static diagnostics** for likely GAP runtime errors, including invalid operators, non-boolean conditions, unsafe selectors, incompatible calls, unassigned locals, and callback predicate mistakes.
@@ -112,6 +113,28 @@ If GAP is installed somewhere else, set `gapCommand` and `gapArgs` in `launch.js
 ```
 
 The debugger runs an instrumented temporary copy of the active source file. Breakpoints map back to the original file, stepping is statement-level for user `.g` code, and runtime errors are reported at the original source line where possible.
+
+## Semantic Object Inspector
+
+When a GAP debug session is paused, open **GAP: Open Object Inspector** or the **GAP Objects** view in Run and Debug. GAP Assist asks the paused GAP process for semantic descriptors of captured locals and globals, then renders inspectable object cards.
+
+For example, after:
+
+```gap
+G := SymmetricGroup(4);
+```
+
+the inspector shows a group card with the GAP view text, known representation, order, generator count, and buttons for lazy computations such as generators, conjugacy classes, character table data, subgroup classes, and elements.
+
+The first semantic inspector supports:
+
+- groups, including permutation groups, pc groups, matrix groups, and finitely presented groups
+- permutations
+- matrices
+- fields, vector spaces, algebras, rings, monoids, and semigroups
+- records, lists, strings, booleans, integers, rationals, cyclotomics, and finite-field elements
+
+Expensive or bulky results are computed only when you click an action button. The same debugger-backed inspector also works when you use **GAP: Debug Current Notebook Cell**, because notebook cells are run through the GAP debugger with previous GAP cells as context.
 
 ## Local Manual Links
 

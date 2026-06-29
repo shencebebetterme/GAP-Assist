@@ -92,6 +92,12 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "gap-debug-adapter-test-")
 const program = path.join(tempDir, "sample.g");
 fs.writeFileSync(program, [
   "x := 1;",
+  "G := SymmetricGroup(4);",
+  "p := (1,2,3);",
+  "m := [[1, 2], [3, 4]];",
+  "r := rec(a := 1, b := \"x\");",
+  "F := GF(5);",
+  "V := GF(5)^2;",
   "f := function(n)",
   "  local y;",
   "  y := n + x;",
@@ -207,7 +213,7 @@ async function main() {
     program,
     breakpoints: [
       {
-        line: 7
+        line: 13
       }
     ],
     gapCommand: "wsl",
@@ -227,7 +233,7 @@ async function main() {
   });
   const stack = await waitForResponse("stackTrace", stackSeq);
   assert.strictEqual(stack.body.stackFrames.length, 1, "adapter should report the current GAP frame");
-  assert.strictEqual(stack.body.stackFrames[0].line, 7, "stack frame should point at the breakpoint line");
+  assert.strictEqual(stack.body.stackFrames[0].line, 13, "stack frame should point at the breakpoint line");
   assert.strictEqual(path.normalize(stack.body.stackFrames[0].source.path), path.normalize(program), "stack frame should use the original source path");
 
   const scopesSeq = send("scopes", {
@@ -241,6 +247,34 @@ async function main() {
   );
   const localsReference = scopeReference(scopes, "Locals");
   const globalsReference = scopeReference(scopes, "Globals");
+
+  const semanticSeq = send("gapSemanticObjects", {
+    frameId: 1
+  });
+  const semantic = await waitForResponse("gapSemanticObjects", semanticSeq);
+  assert.strictEqual(semantic.success, true, "semantic object request should succeed while GAP is paused");
+  const semanticObjects = semantic.body.objects;
+  const semanticGroup = semanticObjects.find((object) => object.name === "G");
+  assert(semanticGroup, "semantic objects should include captured permutation groups");
+  assert.strictEqual(semanticGroup.label, "Group", "semantic group card should classify GAP groups");
+  assert.strictEqual(semanticGroup.knownType, "permutation group", "semantic group card should report the known group representation");
+  assert(semanticGroup.facts.some((fact) => fact.label === "Order" && fact.value === "24"), "semantic group card should compute group order");
+  assert(semanticGroup.facts.some((fact) => fact.label === "Generators" && fact.value === "2"), "semantic group card should compute generator count");
+  assert(semanticGroup.actions.some((action) => action.action === "character-table"), "semantic group card should expose character table action");
+  assert(semanticObjects.some((object) => object.name === "p" && object.label === "Permutation"), "semantic objects should include permutations");
+  assert(semanticObjects.some((object) => object.name === "m" && object.label === "Matrix"), "semantic objects should include matrices");
+  assert(semanticObjects.some((object) => object.name === "r" && object.label === "Record"), "semantic objects should include records");
+  assert(semanticObjects.some((object) => object.name === "F" && object.label === "Field"), "semantic objects should include fields");
+  assert(semanticObjects.some((object) => object.name === "V" && object.label === "Vector space"), "semantic objects should include vector spaces");
+
+  const semanticActionSeq = send("gapSemanticAction", {
+    objectId: "G",
+    action: "generators",
+    frameId: 1
+  });
+  const semanticAction = await waitForResponse("gapSemanticAction", semanticActionSeq);
+  assert.strictEqual(semanticAction.success, true, "semantic object actions should run while GAP remains paused");
+  assert(semanticAction.body.result.includes("(1,2"), "semantic generator action should return GAP generator text");
 
   const variablesSeq = send("variables", {
     variablesReference: globalsReference
@@ -296,7 +330,7 @@ async function main() {
     threadId: 1
   });
   const steppedStack = await waitForResponse("stackTrace", steppedStackSeq);
-  assert.strictEqual(steppedStack.body.stackFrames[0].line, 8, "next should step over the function call");
+  assert.strictEqual(steppedStack.body.stackFrames[0].line, 14, "next should step over the function call");
 
   const steppedVariablesSeq = send("variables", {
     variablesReference: globalsReference
@@ -318,7 +352,7 @@ async function main() {
     threadId: 1
   });
   const stepInStack = await waitForResponse("stackTrace", stepInStackSeq);
-  assert.strictEqual(stepInStack.body.stackFrames[0].line, 3, "stepIn should enter the called function body");
+  assert.strictEqual(stepInStack.body.stackFrames[0].line, 9, "stepIn should enter the called function body");
   assert.strictEqual(stepInStack.body.stackFrames[0].name, "f", "stepIn frame should use the GAP function name");
 
   const stepInVariablesSeq = send("variables", {
@@ -347,7 +381,7 @@ async function main() {
     threadId: 1
   });
   const stepOutStack = await waitForResponse("stackTrace", stepOutStackSeq);
-  assert.strictEqual(stepOutStack.body.stackFrames[0].line, 9, "stepOut should return to the caller's next statement");
+  assert.strictEqual(stepOutStack.body.stackFrames[0].line, 15, "stepOut should return to the caller's next statement");
 
   const stepOutVariablesSeq = send("variables", {
     variablesReference: globalsReference
@@ -370,7 +404,7 @@ async function main() {
     threadId: 1
   });
   const errorStack = await waitForResponse("stackTrace", errorStackSeq);
-  assert.strictEqual(errorStack.body.stackFrames[0].line, 11, "runtime error stack should point at the original failing GAP line");
+  assert.strictEqual(errorStack.body.stackFrames[0].line, 17, "runtime error stack should point at the original failing GAP line");
   assert.strictEqual(path.normalize(errorStack.body.stackFrames[0].source.path), path.normalize(program), "runtime error stack should use the original source path");
 
   const errorGlobalsSeq = send("variables", {
@@ -384,7 +418,7 @@ async function main() {
     15000,
     errorEventStart
   );
-  assert.strictEqual(gapErrorEvent.body.line, 11, "custom GAP runtime error event should report the original source line");
+  assert.strictEqual(gapErrorEvent.body.line, 17, "custom GAP runtime error event should report the original source line");
   assert(gapErrorEvent.body.message.includes("Error,"), "custom GAP runtime error event should include the GAP error message");
   const exceptionInfoSeq = send("exceptionInfo", {
     threadId: 1
@@ -393,7 +427,7 @@ async function main() {
   assert(exceptionInfo.body.description.includes("Location:"), "exception info should include the original source location");
   assert(exceptionInfo.body.details.stackTrace.includes("ForAll"), "exception info should include GAP stack details");
   await waitFor(
-    (message) => message.type === "event" && message.event === "output" && String(message.body.output).includes(`${program}:11`),
+    (message) => message.type === "event" && message.event === "output" && String(message.body.output).includes(`${program}:17`),
     "remapped runtime error source location",
     15000,
     errorEventStart

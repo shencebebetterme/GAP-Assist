@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added a **GAP Objects** debug view that renders semantic cards for paused GAP locals and globals.
+- Added lazy semantic actions for group generators, conjugacy classes, character table summaries, subgroup classes, elements, permutation operations, matrix operations, record fields, list previews, bases, and algebraic generators.
+- Added semantic descriptors for groups, permutations, matrices, fields, vector spaces, algebras, rings, monoids, semigroups, records, lists, strings, booleans, integers, rationals, cyclotomics, and finite-field elements.
+
 ## 0.4.7
 
 - Fixed notebook **Debug Cell** menu visibility for GAP Jupyter notebooks by using the selected GAP kernel context.

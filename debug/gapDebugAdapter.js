@@ -10,6 +10,7 @@ const THREAD_ID = 1;
 const LOCALS_REFERENCE = 1;
 const GLOBALS_REFERENCE = 2;
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
+const SEMANTIC_REQUEST_TIMEOUT_MS = 10000;
 
 class GapDebugAdapter {
   constructor(input = process.stdin, output = process.stdout) {
@@ -43,6 +44,8 @@ class GapDebugAdapter {
     this.lastRuntimeError = undefined;
     this.errorPaused = false;
     this.started = false;
+    this.nextSemanticRequestId = 1;
+    this.semanticRequests = new Map();
   }
 
   start() {
@@ -144,6 +147,14 @@ class GapDebugAdapter {
 
       case "evaluate":
         this.evaluate(request);
+        return;
+
+      case "gapSemanticObjects":
+        await this.gapSemanticObjects(request);
+        return;
+
+      case "gapSemanticAction":
+        await this.gapSemanticAction(request);
         return;
 
       case "exceptionInfo":
@@ -339,6 +350,11 @@ class GapDebugAdapter {
       const hit = this.pendingHit;
       this.pendingHit = undefined;
       this.decideProbeHit(hit);
+      return;
+    }
+
+    if (markerLine.startsWith("__GAPDEBUG_SEM_") || markerLine.startsWith("__GAPDEBUG_ACTION_")) {
+      this.handleSemanticRuntimeLine(markerLine);
     }
   }
 
@@ -467,6 +483,9 @@ class GapDebugAdapter {
       message: errorInfo.message,
       details: errorInfo.details
     });
+    this.sendEvent("gapSemanticObjectsChanged", {
+      reason: "exception"
+    });
     this.sendEvent("stopped", {
       reason: "exception",
       description: "GAP error",
@@ -506,6 +525,9 @@ class GapDebugAdapter {
     this.paused = true;
     this.pauseRequested = false;
     this.stepMode = undefined;
+    this.sendEvent("gapSemanticObjectsChanged", {
+      reason
+    });
     this.sendEvent("stopped", {
       reason,
       threadId: THREAD_ID,
@@ -612,6 +634,174 @@ class GapDebugAdapter {
     });
   }
 
+  async gapSemanticObjects(request) {
+    if (!this.paused || !this.runtime) {
+      this.sendResponse(request, {
+        objects: [],
+        unavailable: this.runtime ? "GAP is running." : "No GAP runtime is active."
+      });
+      return;
+    }
+
+    try {
+      const response = await this.sendSemanticRuntimeCommand("objects");
+      this.sendResponse(request, {
+        objects: response.objects || []
+      });
+    } catch (error) {
+      this.sendResponse(request, undefined, false, error.message);
+    }
+  }
+
+  async gapSemanticAction(request) {
+    if (!this.paused || !this.runtime) {
+      this.sendResponse(request, undefined, false, this.runtime ? "GAP is running." : "No GAP runtime is active.");
+      return;
+    }
+
+    const objectId = String((request.arguments && request.arguments.objectId) || "").trim();
+    const action = String((request.arguments && request.arguments.action) || "").trim();
+    if (!objectId || !action || objectId.includes("\t") || action.includes("\t")) {
+      this.sendResponse(request, undefined, false, "Semantic actions require a captured object id and action id.");
+      return;
+    }
+
+    try {
+      const response = await this.sendSemanticRuntimeCommand("action", {
+        objectId,
+        action
+      });
+      if (response.error) {
+        this.sendResponse(request, undefined, false, response.error);
+        return;
+      }
+      this.sendResponse(request, {
+        objectId: response.objectId || objectId,
+        action: response.action || action,
+        result: response.result || ""
+      });
+    } catch (error) {
+      this.sendResponse(request, undefined, false, error.message);
+    }
+  }
+
+  sendSemanticRuntimeCommand(kind, options = {}) {
+    if (!this.runtime || !this.runtime.stdin || !this.runtime.stdin.writable) {
+      return Promise.reject(new Error("No writable GAP runtime is available."));
+    }
+
+    const requestId = String(this.nextSemanticRequestId);
+    this.nextSemanticRequestId += 1;
+    const command = kind === "action"
+      ? `__GAPDEBUG_ACTION__\t${requestId}\t${options.objectId}\t${options.action}`
+      : `__GAPDEBUG_OBJECTS__\t${requestId}`;
+
+    return new Promise((resolve, reject) => {
+      const entry = {
+        kind,
+        objects: [],
+        objectsById: new Map(),
+        objectId: options.objectId,
+        action: options.action,
+        result: "",
+        error: "",
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.semanticRequests.delete(requestId);
+          reject(new Error("Timed out waiting for GAP semantic data."));
+        }, SEMANTIC_REQUEST_TIMEOUT_MS)
+      };
+      this.semanticRequests.set(requestId, entry);
+      this.writeRuntimeCommand(command);
+    });
+  }
+
+  handleSemanticRuntimeLine(line) {
+    const parts = line.split("\t");
+    const marker = parts[0];
+    const requestId = unescapeField(parts[1] || "");
+    const entry = this.semanticRequests.get(requestId);
+    if (!entry) {
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_SEM_OBJECT__") {
+      const object = {
+        objectId: unescapeField(parts[2] || ""),
+        name: unescapeField(parts[3] || ""),
+        kind: unescapeField(parts[4] || "object"),
+        label: unescapeField(parts[5] || "GAP object"),
+        view: unescapeField(parts[6] || ""),
+        knownType: unescapeField(parts[7] || ""),
+        facts: [],
+        actions: []
+      };
+      entry.objects.push(object);
+      entry.objectsById.set(object.objectId, object);
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_SEM_FACT__") {
+      const object = entry.objectsById.get(unescapeField(parts[2] || ""));
+      if (object) {
+        object.facts.push({
+          label: unescapeField(parts[3] || ""),
+          value: unescapeField(parts.slice(4).join("\t"))
+        });
+      }
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_SEM_ACTION__") {
+      const object = entry.objectsById.get(unescapeField(parts[2] || ""));
+      if (object) {
+        object.actions.push({
+          action: unescapeField(parts[3] || ""),
+          label: unescapeField(parts.slice(4).join("\t"))
+        });
+      }
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_SEM_END__") {
+      this.resolveSemanticRequest(requestId, entry);
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_ACTION_BEGIN__") {
+      entry.objectId = unescapeField(parts[2] || entry.objectId || "");
+      entry.action = unescapeField(parts[3] || entry.action || "");
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_ACTION_RESULT__") {
+      entry.result = unescapeField(parts.slice(2).join("\t"));
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_ACTION_ERROR__") {
+      entry.error = unescapeField(parts.slice(2).join("\t"));
+      return;
+    }
+
+    if (marker === "__GAPDEBUG_ACTION_END__") {
+      this.resolveSemanticRequest(requestId, entry);
+    }
+  }
+
+  resolveSemanticRequest(requestId, entry) {
+    clearTimeout(entry.timer);
+    this.semanticRequests.delete(requestId);
+    entry.resolve({
+      objects: entry.objects,
+      objectId: entry.objectId,
+      action: entry.action,
+      result: entry.result,
+      error: entry.error
+    });
+  }
+
   exceptionInfo(request) {
     const errorInfo = this.lastRuntimeError;
     if (!errorInfo) {
@@ -649,6 +839,7 @@ class GapDebugAdapter {
       return;
     }
 
+    this.rejectPendingSemanticRequests("GAP resumed before semantic data was returned.");
     const wasErrorPaused = this.errorPaused;
     this.paused = false;
     this.lastRuntimeError = wasErrorPaused ? this.lastRuntimeError : undefined;
@@ -695,6 +886,7 @@ class GapDebugAdapter {
 
   disconnect(request) {
     this.sendResponse(request);
+    this.rejectPendingSemanticRequests("GAP debug session disconnected.");
     if (this.runtime) {
       this.runtime.kill();
       this.runtime = undefined;
@@ -754,6 +946,7 @@ class GapDebugAdapter {
       this.runtimeErrorTimer = undefined;
     }
     this.pendingRuntimeError = undefined;
+    this.rejectPendingSemanticRequests("GAP runtime ended.");
 
     if (this.tempDir) {
       fs.rmSync(this.tempDir, {
@@ -770,6 +963,14 @@ class GapDebugAdapter {
       });
     }
     this.temporaryProgramDirectory = undefined;
+  }
+
+  rejectPendingSemanticRequests(message) {
+    for (const [requestId, entry] of this.semanticRequests) {
+      clearTimeout(entry.timer);
+      entry.reject(new Error(message));
+      this.semanticRequests.delete(requestId);
+    }
   }
 }
 

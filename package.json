@@ -28,6 +28,8 @@
     "onCommand:gapReference.openLocalManual",
     "onCommand:gapReference.debugCurrentFile",
     "onCommand:gapReference.debugCurrentNotebookCell",
+    "onCommand:gapReference.openSemanticObjects",
+    "onView:gapSemanticObjects",
     "onDebugResolve:gap"
   ],
   "main": "./src/extension.js",
@@ -150,6 +152,14 @@
         "language": "gap"
       }
     ],
+    "views": {
+      "debug": [
+        {
+          "id": "gapSemanticObjects",
+          "name": "GAP Objects"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "gapReference.openLocalManual",
@@ -165,6 +175,11 @@
         "title": "Debug Current Notebook Cell",
         "shortTitle": "Debug Cell",
         "icon": "$(debug-alt-small)",
+        "category": "GAP"
+      },
+      {
+        "command": "gapReference.openSemanticObjects",
+        "title": "Open Object Inspector",
         "category": "GAP"
       }
     ],
