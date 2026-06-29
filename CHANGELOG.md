@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Changed **GAP Objects** to inspect one selected debug variable at a time through the Variables view context menu.
+- Restyled lazy action results into separate labeled result panels with clearer formatting.
+
 ## 0.5.1
 
 - Fixed the **GAP Objects** view contribution so VS Code loads it as a webview instead of a tree view.

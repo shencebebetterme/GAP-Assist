@@ -116,7 +116,7 @@ The debugger runs an instrumented temporary copy of the active source file. Brea
 
 ## Semantic Object Inspector
 
-When a GAP debug session is paused, open **GAP: Open Object Inspector** or the **GAP Objects** view in Run and Debug. GAP Assist asks the paused GAP process for semantic descriptors of captured locals and globals, then renders inspectable object cards.
+When a GAP debug session is paused, right-click a bound value in the **Variables** view and choose **Inspect in GAP Objects**. GAP Assist asks the paused GAP process for a semantic descriptor of that selected local or global, then renders one inspectable object card in the **GAP Objects** view.
 
 For example, after:
 
@@ -124,7 +124,7 @@ For example, after:
 G := SymmetricGroup(4);
 ```
 
-the inspector shows a group card with the GAP view text, known representation, order, generator count, and buttons for lazy computations such as generators, conjugacy classes, character table data, subgroup classes, and elements.
+right-clicking `G` in **Variables** and choosing **Inspect in GAP Objects** shows a group card with the GAP view text, known representation, order, generator count, and buttons for lazy computations such as generators, conjugacy classes, character table data, subgroup classes, and elements.
 
 The first semantic inspector supports:
 

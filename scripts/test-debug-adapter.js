@@ -267,6 +267,17 @@ async function main() {
   assert(semanticObjects.some((object) => object.name === "F" && object.label === "Field"), "semantic objects should include fields");
   assert(semanticObjects.some((object) => object.name === "V" && object.label === "Vector space"), "semantic objects should include vector spaces");
 
+  const selectedSemanticSeq = send("gapSemanticObjects", {
+    objectId: "G",
+    frameId: 1
+  });
+  const selectedSemantic = await waitForResponse("gapSemanticObjects", selectedSemanticSeq);
+  assert.deepStrictEqual(
+    selectedSemantic.body.objects.map((object) => object.name),
+    ["G"],
+    "semantic object requests should support inspecting one selected variable"
+  );
+
   const semanticActionSeq = send("gapSemanticAction", {
     objectId: "G",
     action: "generators",
@@ -283,6 +294,14 @@ async function main() {
   const x = variables.body.variables.find((variable) => variable.name === "x");
   assert(x, "captured globals should include x");
   assert.strictEqual(x.value, "1", "x should have its runtime value before the function call executes");
+  const variableG = variables.body.variables.find((variable) => variable.name === "G");
+  assert(variableG, "captured globals should include G");
+  assert.strictEqual(variableG.__gapSemanticObjectId, "G", "debug variables should carry semantic object ids");
+  assert.strictEqual(
+    variableG.__vscodeVariableMenuContext,
+    "gapSemanticObject",
+    "debug variables should opt into the GAP Objects Variables context menu"
+  );
   const f = variables.body.variables.find((variable) => variable.name === "f");
   assert(f, "captured globals should include f");
   assert.strictEqual(f.value, "function (n) ... end", "function variables should not expose inserted debug probe code");

@@ -72,7 +72,11 @@ function main() {
     if (!commands.includes("gapReference.openSemanticObjects")) {
       failures.push("package.json must contribute the GAP object inspector command");
     }
+    if (!commands.includes("gapReference.inspectSemanticObject")) {
+      failures.push("package.json must contribute the GAP object variable inspector command");
+    }
     validateSemanticObjectView(packageJson.contributes.views, failures);
+    validateSemanticObjectVariableMenu(packageJson.contributes.menus, failures);
     validateNotebookDebugMenus(packageJson.contributes.menus, failures);
     const activationEvents = Array.isArray(packageJson.activationEvents) ? packageJson.activationEvents : [];
     if (!activationEvents.includes("onDebugResolve:gap")) {
@@ -158,6 +162,20 @@ function validateSemanticObjectView(views, failures) {
   }
   if (objectView.type !== "webview") {
     failures.push("GAP Objects view must declare type webview so VS Code uses the webview provider");
+  }
+}
+
+function validateSemanticObjectVariableMenu(menus, failures) {
+  const items = menus && Array.isArray(menus["debug/variables/context"]) ? menus["debug/variables/context"] : [];
+  const command = "gapReference.inspectSemanticObject";
+  const item = items.find((candidate) => candidate && candidate.command === command);
+  if (!item) {
+    failures.push("package.json must add Inspect in GAP Objects to the debug Variables context menu");
+    return;
+  }
+  const when = typeof item.when === "string" ? item.when : "";
+  if (!when.includes("debugConfigurationType == gap") || !when.includes("debugProtocolVariableMenuContext == gapSemanticObject")) {
+    failures.push("GAP object variable menu should be limited to GAP semantic debug variables");
   }
 }
 

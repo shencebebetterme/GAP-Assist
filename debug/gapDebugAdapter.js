@@ -602,7 +602,9 @@ class GapDebugAdapter {
         name: variable.name,
         value: runtimeVariableValue(variable),
         type: variable.bound ? "GAP value" : "unbound",
-        variablesReference: 0
+        variablesReference: 0,
+        __gapSemanticObjectId: variable.bound ? variable.name : undefined,
+        __vscodeVariableMenuContext: variable.bound ? "gapSemanticObject" : undefined
       }));
     this.sendResponse(request, { variables });
   }
@@ -643,8 +645,16 @@ class GapDebugAdapter {
       return;
     }
 
+    const objectId = String((request.arguments && request.arguments.objectId) || "").trim();
+    if (objectId && objectId.includes("\t")) {
+      this.sendResponse(request, undefined, false, "Semantic object ids cannot contain tab characters.");
+      return;
+    }
+
     try {
-      const response = await this.sendSemanticRuntimeCommand("objects");
+      const response = await this.sendSemanticRuntimeCommand(objectId ? "object" : "objects", {
+        objectId
+      });
       this.sendResponse(request, {
         objects: response.objects || []
       });
@@ -694,7 +704,9 @@ class GapDebugAdapter {
     this.nextSemanticRequestId += 1;
     const command = kind === "action"
       ? `__GAPDEBUG_ACTION__\t${requestId}\t${options.objectId}\t${options.action}`
-      : `__GAPDEBUG_OBJECTS__\t${requestId}`;
+      : kind === "object"
+        ? `__GAPDEBUG_OBJECT__\t${requestId}\t${options.objectId}`
+        : `__GAPDEBUG_OBJECTS__\t${requestId}`;
 
     return new Promise((resolve, reject) => {
       const entry = {

@@ -545,6 +545,15 @@ __GAPDEBUG_FindCapturedValue := function(name, names, values)
   return fail;
 end;;
 
+__GAPDEBUG_PrintSemanticObjectByName := function(requestId, objectId, names, values)
+  local value;
+  value := __GAPDEBUG_FindCapturedValue(objectId, names, values);
+  if value <> fail then
+    __GAPDEBUG_PrintSemanticDescription(requestId, objectId, value);
+  fi;
+  Print("__GAPDEBUG_SEM_END__\\t", __GAPDEBUG_Escape(requestId), "\\n");
+end;;
+
 __GAPDEBUG_ListPreview := function(value)
   local count;
   count := Minimum(Length(value), 20);
@@ -654,6 +663,11 @@ __GAPDEBUG_Probe := function(id, file, line, column, functionName, depth, names,
       parts := SplitString(command, "\\t");
       if Length(parts) >= 2 then
         __GAPDEBUG_PrintSemanticObjects(parts[2], names, values);
+      fi;
+    elif __GAPDEBUG_CommandStartsWith(command, "__GAPDEBUG_OBJECT__\\t") then
+      parts := SplitString(command, "\\t");
+      if Length(parts) >= 3 then
+        __GAPDEBUG_PrintSemanticObjectByName(parts[2], parts[3], names, values);
       fi;
     elif __GAPDEBUG_CommandStartsWith(command, "__GAPDEBUG_ACTION__\\t") then
       parts := SplitString(command, "\\t");

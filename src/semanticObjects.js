@@ -11,7 +11,9 @@ class GapSemanticObjectsProvider {
     this.refreshToken = 0;
     this.state = {
       loading: false,
-      unavailable: "Start a GAP debug session and pause at a breakpoint to inspect runtime objects.",
+      unavailable: "Right-click a GAP variable in the Variables view and choose Inspect in GAP Objects.",
+      selectedObjectId: "",
+      selectedName: "",
       objects: [],
       results: {}
     };
@@ -48,6 +50,34 @@ class GapSemanticObjectsProvider {
     await this.refresh();
   }
 
+  async inspectVariable(variable) {
+    const objectId = semanticObjectIdFromVariable(variable);
+    const selectedName = semanticObjectNameFromVariable(variable) || objectId;
+    if (!objectId) {
+      this.state = {
+        ...this.state,
+        loading: false,
+        error: "Select a bound GAP variable before opening the object inspector.",
+        unavailable: "",
+        objects: [],
+        results: {}
+      };
+      this.postState();
+      return;
+    }
+
+    this.state = {
+      loading: false,
+      unavailable: "",
+      selectedObjectId: objectId,
+      selectedName,
+      objects: [],
+      results: {}
+    };
+    this.postState();
+    await this.focus();
+  }
+
   async refresh() {
     const token = ++this.refreshToken;
     const session = activeGapDebugSession();
@@ -55,6 +85,23 @@ class GapSemanticObjectsProvider {
       this.state = {
         loading: false,
         unavailable: "Start a GAP debug session and pause at a breakpoint to inspect runtime objects.",
+        error: "",
+        selectedObjectId: this.state.selectedObjectId || "",
+        selectedName: this.state.selectedName || "",
+        objects: [],
+        results: {}
+      };
+      this.postState();
+      return;
+    }
+
+    const objectId = this.state.selectedObjectId;
+    if (!objectId) {
+      this.state = {
+        ...this.state,
+        loading: false,
+        unavailable: "Right-click a GAP variable in the Variables view and choose Inspect in GAP Objects.",
+        error: "",
         objects: [],
         results: {}
       };
@@ -71,14 +118,17 @@ class GapSemanticObjectsProvider {
     this.postState();
 
     try {
-      const response = await session.customRequest("gapSemanticObjects", {});
+      const response = await session.customRequest("gapSemanticObjects", {
+        objectId
+      });
       if (token !== this.refreshToken) {
         return;
       }
       const objects = Array.isArray(response && response.objects) ? response.objects : [];
       this.state = {
+        ...this.state,
         loading: false,
-        unavailable: (response && response.unavailable) || (objects.length === 0 ? "No captured GAP objects are available at this pause point." : ""),
+        unavailable: (response && response.unavailable) || (objects.length === 0 ? `The selected GAP variable ${objectId} is not available at this pause point.` : ""),
         objects,
         results: this.retainActionResults(objects)
       };
@@ -88,6 +138,7 @@ class GapSemanticObjectsProvider {
         return;
       }
       this.state = {
+        ...this.state,
         loading: false,
         unavailable: "",
         error: error && error.message ? error.message : "Could not inspect GAP objects.",
@@ -194,7 +245,8 @@ class GapSemanticObjectsProvider {
 function registerSemanticObjectsSupport(context, outputChannel) {
   const provider = new GapSemanticObjectsProvider(outputChannel);
   const disposables = [
-    vscode.commands.registerCommand("gapReference.openSemanticObjects", () => provider.focus())
+    vscode.commands.registerCommand("gapReference.openSemanticObjects", () => provider.focus()),
+    vscode.commands.registerCommand("gapReference.inspectSemanticObject", (variable) => provider.inspectVariable(variable))
   ];
 
   if (vscode.window && typeof vscode.window.registerWebviewViewProvider === "function") {
@@ -237,6 +289,23 @@ function activeGapDebugSession() {
 
 function actionResultKey(objectId, action) {
   return `${objectId}::${action}`;
+}
+
+function semanticObjectIdFromVariable(variable) {
+  if (!variable || typeof variable !== "object") {
+    return "";
+  }
+  if (typeof variable.__gapSemanticObjectId === "string" && variable.__gapSemanticObjectId.trim()) {
+    return variable.__gapSemanticObjectId.trim();
+  }
+  if (typeof variable.evaluateName === "string" && variable.evaluateName.trim()) {
+    return variable.evaluateName.trim();
+  }
+  return typeof variable.name === "string" ? variable.name.trim() : "";
+}
+
+function semanticObjectNameFromVariable(variable) {
+  return variable && typeof variable.name === "string" ? variable.name.trim() : "";
 }
 
 function semanticObjectsHtml() {
@@ -287,6 +356,10 @@ function semanticObjectsHtml() {
     }
     button.secondary:hover {
       background: var(--vscode-button-secondaryHoverBackground);
+    }
+    button.small {
+      padding: 2px 6px;
+      font-size: 11px;
     }
     .message {
       color: var(--vscode-descriptionForeground);
@@ -340,20 +413,51 @@ function semanticObjectsHtml() {
       gap: 6px;
       padding: 0 10px 10px;
     }
-    pre {
-      margin: 0;
-      padding: 8px 10px 10px;
+    .selected {
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .result-card {
       border-top: 1px solid var(--vscode-panel-border);
+      background: var(--vscode-sideBarSectionHeader-background);
+    }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+    .result-title {
+      font-weight: 600;
+    }
+    .result-status {
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+    }
+    .result-body {
+      margin: 0;
+      padding: 9px 10px 11px;
       background: var(--vscode-textCodeBlock-background);
       font-family: var(--vscode-editor-font-family);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+    .result-body.error {
+      color: var(--vscode-errorForeground);
+    }
   </style>
 </head>
 <body>
   <div class="toolbar">
-    <div class="title">GAP Objects</div>
+    <div>
+      <div class="title">GAP Objects</div>
+      <div id="selected" class="selected"></div>
+    </div>
     <button id="refresh" class="secondary" title="Refresh semantic objects">Refresh</button>
   </div>
   <div id="root" class="message">Waiting for GAP debug data.</div>
@@ -371,8 +475,10 @@ function semanticObjectsHtml() {
     function render(state) {
       root.replaceChildren();
       root.className = "";
+      const selected = document.getElementById("selected");
+      selected.textContent = state.selectedName ? "Selected: " + state.selectedName : "";
       if (state.loading) {
-        appendMessage("Inspecting paused GAP values...");
+        appendMessage("Inspecting " + (state.selectedName || state.selectedObjectId || "selected GAP value") + "...");
       }
       if (state.error) {
         appendMessage(state.error, "error");
@@ -448,17 +554,52 @@ function semanticObjectsHtml() {
         if (!result) {
           continue;
         }
-        const pre = document.createElement("pre");
-        pre.textContent = result.loading
-          ? "Computing " + (action.label || action.action) + "..."
-          : (result.error || result.result || "");
-        if (result.error) {
-          pre.className = "error";
-        }
-        card.appendChild(pre);
+        card.appendChild(resultCard(action, result));
       }
 
       return card;
+    }
+    function resultCard(action, result) {
+      const section = document.createElement("section");
+      section.className = "result-card";
+
+      const header = document.createElement("div");
+      header.className = "result-header";
+      const title = document.createElement("div");
+      title.className = "result-title";
+      title.textContent = action.label || action.action;
+      const right = document.createElement("div");
+      right.className = "result-status";
+      right.textContent = result.loading ? "Computing" : (result.error ? "Error" : "Result");
+      header.append(title, right);
+
+      if (!result.loading && !result.error && result.result) {
+        const copy = document.createElement("button");
+        copy.className = "secondary small";
+        copy.textContent = "Copy";
+        copy.addEventListener("click", () => {
+          navigator.clipboard.writeText(result.result);
+        });
+        header.appendChild(copy);
+      }
+
+      const body = document.createElement("pre");
+      body.className = result.error ? "result-body error" : "result-body";
+      body.textContent = result.loading
+        ? "Computing " + (action.label || action.action) + "..."
+        : prettyGapText(result.error || result.result || "");
+
+      section.append(header, body);
+      return section;
+    }
+    function prettyGapText(text) {
+      return String(text || "")
+        .replace(/, rec\\(/g, ",\\nrec(")
+        .replace(/\\), rec\\(/g, "),\\nrec(")
+        .replace(/\\], \\[/g, "],\\n[")
+        .replace(/, CharacterTable\\(/g, ",\\nCharacterTable(")
+        .replace(/, Group\\(/g, ",\\nGroup(")
+        .trim();
     }
     function appendFact(parent, label, value) {
       const left = document.createElement("div");

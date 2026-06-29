@@ -2,7 +2,7 @@
   "name": "gap-assist",
   "displayName": "GAP Assist",
   "description": "Language intelligence, reference hovers, static analysis, and debugging for GAP.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "shencebebetterme",
   "license": "GPL-2.0-or-later",
   "icon": "assets/icon.png",
@@ -29,6 +29,7 @@
     "onCommand:gapReference.debugCurrentFile",
     "onCommand:gapReference.debugCurrentNotebookCell",
     "onCommand:gapReference.openSemanticObjects",
+    "onCommand:gapReference.inspectSemanticObject",
     "onView:gapSemanticObjects",
     "onDebugResolve:gap"
   ],
@@ -182,9 +183,21 @@
         "command": "gapReference.openSemanticObjects",
         "title": "Open Object Inspector",
         "category": "GAP"
+      },
+      {
+        "command": "gapReference.inspectSemanticObject",
+        "title": "Inspect in GAP Objects",
+        "category": "GAP"
       }
     ],
     "menus": {
+      "debug/variables/context": [
+        {
+          "command": "gapReference.inspectSemanticObject",
+          "when": "debugConfigurationType == gap && debugProtocolVariableMenuContext == gapSemanticObject",
+          "group": "1_view"
+        }
+      ],
       "editor/title/run": [
         {
           "command": "gapReference.debugCurrentFile",
