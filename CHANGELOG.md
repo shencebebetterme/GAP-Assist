@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6
+
+- Changed hover documentation links for GAP system and package functions to open the online GAP documentation.
+
 ## 0.5.5
 
 - Added **Go to Definition** support for GAP variables and functions with F12.
